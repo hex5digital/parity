@@ -209,15 +209,19 @@ export default async function handler(req, res) {
     const t0 = Date.now()
     console.log('[scan] connecting to Browserless...')
 
-    browser = await chromium.connect(
-      `wss://production-sfo.browserless.io/chromium/playwright?token=${browserlessToken}`,
+    // Use connectOverCDP (not chromium.connect with /playwright) — CDP is
+    // version-tolerant, avoiding 428 errors when the Browserless server's
+    // Playwright version differs from our playwright-core version.
+    browser = await chromium.connectOverCDP(
+      `wss://production-sfo.browserless.io?token=${browserlessToken}`,
       { timeout: 15000 }
     )
     console.log(`[scan] connected in ${Date.now() - t0}ms`)
 
-    const context = await browser.newContext({
-      viewport: { width: 1280, height: 800 },
-      userAgent: 'Mozilla/5.0 (compatible; Hex5ParityBot/1.0; +https://hex5digital.com/parity)',
+    // connectOverCDP exposes the browser's existing default context
+    const context = browser.contexts()[0] || (await browser.newContext())
+    await context.setExtraHTTPHeaders({
+      'User-Agent': 'Mozilla/5.0 (compatible; Hex5ParityBot/1.0; +https://hex5digital.com/parity)',
     })
     const page = await context.newPage()
     console.log(`[scan] context+page ready at ${Date.now() - t0}ms`)
