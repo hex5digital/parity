@@ -204,7 +204,7 @@ export default async function handler(req, res) {
     browser = await chromium.launch({
       args: chromiumBinary.args,
       executablePath,
-      headless: chromiumBinary.headless,
+      headless: true,
     })
 
     const context = await browser.newContext({
