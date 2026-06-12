@@ -1,8 +1,7 @@
 {
   "functions": {
     "api/scan.js": {
-      "maxDuration": 60,
-      "memory": 1769
+      "maxDuration": 60
     },
     "api/submit-lead.js": {
       "maxDuration": 10

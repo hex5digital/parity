@@ -215,7 +215,12 @@ export default async function handler(req, res) {
     })
     const page = await context.newPage()
 
-    await page.goto(url, { waitUntil: 'networkidle', timeout: 30000 })
+    await page.goto(url, { waitUntil: 'load', timeout: 20000 })
+
+    // Brief settle time for late-loading content (images, fonts, lazy
+    // elements) without waiting for full network idle, which can hang
+    // indefinitely on sites with analytics/chat widgets/etc.
+    await page.waitForTimeout(1500)
 
     const axeResults = await new AxeBuilder({ page })
       .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'])
