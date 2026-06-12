@@ -6,25 +6,19 @@
 // Runtime: Node.js on Vercel, "maxDuration" extended via vercel.json
 // (see vercel.json — Hobby plan allows up to 60s on serverless functions)
 //
-// Dependencies (see api/package.json — versions matter, they must be paired):
+// Dependencies (see api/package.json):
 //   "playwright-core": "1.41.2"
 //   "@axe-core/playwright": "^4.10.0"
-//   "@sparticuz/chromium-min": "121.0.0"
 //
-// NOTE: @sparticuz/chromium's bundled Chromium binary requires shared
-// libraries (libnss3, etc.) that are missing on Vercel's Node runtime,
-// causing "libnss3.so: cannot open shared object file" at launch.
-// @sparticuz/chromium-min avoids bundling the binary at all — instead
-// it downloads a Vercel-compatible Chromium build from a remote URL at
-// runtime (cached across warm invocations). The URL below points to the
-// official prebuilt pack for this chromium version, hosted by the
-// @sparticuz/chromium maintainer.
+// NOTE: This function connects to a remote headless Chrome instance via
+// Browserless (browserless.io) over CDP, instead of launching Chromium
+// locally. @sparticuz/chromium and its variants bundle/fetch Chromium
+// binaries that require shared libraries (libnss3, etc.) missing on
+// Vercel's Node runtime — this sidesteps that entirely. Requires the
+// BROWSERLESS_TOKEN environment variable to be set in Vercel.
 
 import { chromium } from 'playwright-core'
-import chromiumBinary from '@sparticuz/chromium-min'
 import AxeBuilder from '@axe-core/playwright'
-
-const CHROMIUM_PACK_URL = 'https://github.com/Sparticuz/chromium/releases/download/v121.0.0/chromium-v121.0.0-pack.tar'
 
 export const config = {
   maxDuration: 60,
@@ -203,15 +197,17 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: 'Invalid URL' })
   }
 
+  const browserlessToken = process.env.BROWSERLESS_TOKEN
+  if (!browserlessToken) {
+    console.error('Scan error: BROWSERLESS_TOKEN environment variable is not set')
+    return res.status(500).json({ error: 'config_error', message: 'Scanning is temporarily unavailable. Please try again later.' })
+  }
+
   let browser
   try {
-    const executablePath = await chromiumBinary.executablePath(CHROMIUM_PACK_URL)
-
-    browser = await chromium.launch({
-      args: chromiumBinary.args,
-      executablePath,
-      headless: true,
-    })
+    browser = await chromium.connect(
+      `wss://production-sfo.browserless.io?token=${browserlessToken}`
+    )
 
     const context = await browser.newContext({
       viewport: { width: 1280, height: 800 },
@@ -271,6 +267,9 @@ export default async function handler(req, res) {
     console.error('Scan error:', err)
 
     // Distinguish common failure modes for a better user-facing message
+    if (err.message?.includes('browserType.connect') || err.message?.includes('websocket')) {
+      return res.status(502).json({ error: 'browser_unavailable', message: 'The scanning service is temporarily unavailable. Please try again in a moment.' })
+    }
     if (err.message?.includes('timeout')) {
       return res.status(504).json({ error: 'timeout', message: 'The site took too long to respond.' })
     }
