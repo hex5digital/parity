@@ -1,0 +1,10 @@
+{
+  "name": "parity-scan-api",
+  "private": true,
+  "type": "commonjs",
+  "dependencies": {
+    "playwright-core": "^1.45.0",
+    "@axe-core/playwright": "^4.9.0",
+    "@sparticuz/chromium": "^123.0.1"
+  }
+}
