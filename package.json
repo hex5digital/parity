@@ -1,10 +1,21 @@
 {
-  "name": "parity-scan-api",
+  "name": "parity-by-hex5",
+  "version": "1.0.0",
   "private": true,
   "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
   "dependencies": {
-    "playwright-core": "1.41.2",
-    "@axe-core/playwright": "^4.10.0",
-    "@sparticuz/chromium": "121.0.0"
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "jspdf": "^2.5.1",
+    "jspdf-autotable": "^3.8.2"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^4.2.1",
+    "vite": "^5.0.8"
   }
 }

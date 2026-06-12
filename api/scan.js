@@ -6,10 +6,15 @@
 // Runtime: Node.js on Vercel, "maxDuration" extended via vercel.json
 // (see vercel.json — Hobby plan allows up to 60s on serverless functions)
 //
-// Dependencies (add to package.json):
-//   "playwright-core": "^1.45.0"
-//   "@axe-core/playwright": "^4.9.0"
-//   "@sparticuz/chromium": "^123.0.1"   (lightweight Chromium binary for serverless)
+// Dependencies (see api/package.json — versions matter, they must be paired):
+//   "playwright-core": "1.41.2"
+//   "@axe-core/playwright": "^4.10.0"
+//   "@sparticuz/chromium": "121.0.0"
+//
+// NOTE: newer @sparticuz/chromium versions (123+) can fail on Vercel's
+// Node runtime with "libnss3.so: cannot open shared object file" — this
+// is a missing system library on Vercel's host, not a code bug.
+// 121.0.0 is widely reported to work without requiring libnss3.
 
 import { chromium } from 'playwright-core'
 import chromiumBinary from '@sparticuz/chromium'
@@ -194,10 +199,12 @@ export default async function handler(req, res) {
 
   let browser
   try {
+    const executablePath = await chromiumBinary.executablePath()
+
     browser = await chromium.launch({
       args: chromiumBinary.args,
-      executablePath: await chromiumBinary.executablePath(),
-      headless: true,
+      executablePath,
+      headless: chromiumBinary.headless,
     })
 
     const context = await browser.newContext({
