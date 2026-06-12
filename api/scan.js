@@ -9,16 +9,22 @@
 // Dependencies (see api/package.json — versions matter, they must be paired):
 //   "playwright-core": "1.41.2"
 //   "@axe-core/playwright": "^4.10.0"
-//   "@sparticuz/chromium": "121.0.0"
+//   "@sparticuz/chromium-min": "121.0.0"
 //
-// NOTE: newer @sparticuz/chromium versions (123+) can fail on Vercel's
-// Node runtime with "libnss3.so: cannot open shared object file" — this
-// is a missing system library on Vercel's host, not a code bug.
-// 121.0.0 is widely reported to work without requiring libnss3.
+// NOTE: @sparticuz/chromium's bundled Chromium binary requires shared
+// libraries (libnss3, etc.) that are missing on Vercel's Node runtime,
+// causing "libnss3.so: cannot open shared object file" at launch.
+// @sparticuz/chromium-min avoids bundling the binary at all — instead
+// it downloads a Vercel-compatible Chromium build from a remote URL at
+// runtime (cached across warm invocations). The URL below points to the
+// official prebuilt pack for this chromium version, hosted by the
+// @sparticuz/chromium maintainer.
 
 import { chromium } from 'playwright-core'
-import chromiumBinary from '@sparticuz/chromium'
+import chromiumBinary from '@sparticuz/chromium-min'
 import AxeBuilder from '@axe-core/playwright'
+
+const CHROMIUM_PACK_URL = 'https://github.com/Sparticuz/chromium/releases/download/v121.0.0/chromium-v121.0.0-pack.tar'
 
 export const config = {
   maxDuration: 60,
@@ -199,7 +205,7 @@ export default async function handler(req, res) {
 
   let browser
   try {
-    const executablePath = await chromiumBinary.executablePath()
+    const executablePath = await chromiumBinary.executablePath(CHROMIUM_PACK_URL)
 
     browser = await chromium.launch({
       args: chromiumBinary.args,
