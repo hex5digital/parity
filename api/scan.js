@@ -209,7 +209,7 @@ export default async function handler(req, res) {
     console.log('[scan] connecting to Browserless...')
 
     browser = await chromium.connect(
-      `wss://production-sfo.browserless.io?token=${browserlessToken}`,
+      `wss://production-sfo.browserless.io/chromium/playwright?token=${browserlessToken}`,
       { timeout: 15000 }
     )
     console.log(`[scan] connected in ${Date.now() - t0}ms`)
