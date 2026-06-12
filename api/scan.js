@@ -27,14 +27,17 @@ export const config = {
 // ── Mapping: axe rule ID → plain-language issue template ───────────
 // Each entry defines how a raw axe-core violation becomes a
 // business-readable finding. dollarPerInstance is a rough blended
-// dev-rate estimate ($150/hr) used to compute the cost range.
+// dev-rate estimate ($175/hr) used to compute the cost range. Ranges
+// reflect this single page only — see the "scope" caveat surfaced in
+// the UI and PDF, since shared templates and manual-review findings
+// typically expand real project scope beyond a single-page scan.
 const RULE_MAP = {
   'image-alt': {
     id:'alt', risk:'high',
     plain:'Images on your site are invisible to some customers',
     who:'Blind customers and anyone using assistive technology cannot access your images, product photos, or chart data. This is one of the most commonly cited violations in ADA website lawsuits.',
     fix:'Each image needs a brief text description added behind the scenes. Most can be fixed in minutes. Charts and graphs take longer because the data itself needs to be described.',
-    hoursPerInstance: [0.1, 0.4],
+    hoursPerInstance: [0.15, 0.6],
     devDetailTemplate: 'Missing or empty alt attributes on <img> elements. WCAG 1.1.1 (A). Use aria-describedby for complex images.',
   },
   'color-contrast': {
@@ -42,7 +45,7 @@ const RULE_MAP = {
     plain:'Your text is hard to read for many people',
     who:'1 in 12 men and 1 in 200 women have color vision deficiency. Low-contrast text also fails anyone reading in bright light or on a low-quality screen. Contrast failures are among the most common issues found in ADA complaints.',
     fix:"Some text and background color combinations on your site don't meet the legal minimum. Your design team needs to darken certain text colors or lighten backgrounds. Often a brand color adjustment is involved.",
-    hoursPerInstance: [0.25, 1],
+    hoursPerInstance: [0.4, 1.5],
     devDetailTemplate: 'Text fails 4.5:1 contrast ratio (WCAG 1.4.3 AA). Common failures: gray-on-white body copy, light text on brand color backgrounds.',
   },
   'link-name': {
@@ -50,7 +53,7 @@ const RULE_MAP = {
     plain:'Some links have no description of where they go',
     who:'Screen reader users navigate by jumping between links. A link with no text or only an icon gives them no information about its destination or purpose.',
     fix:'Links need either visible text describing their destination, or a hidden label that screen readers can announce (such as "Download Q3 report PDF").',
-    hoursPerInstance: [0.1, 0.3],
+    hoursPerInstance: [0.15, 0.45],
     devDetailTemplate: 'Links lack discernible text. WCAG 2.4.4 (A), 4.1.2 (A). Add aria-label or visually-hidden text inside the link.',
   },
   'button-name': {
@@ -58,7 +61,7 @@ const RULE_MAP = {
     plain:'Some buttons have no label that assistive technology can read',
     who:'Screen reader users hear "button" with no indication of what it does — common with icon-only buttons like search, menu, or close icons.',
     fix:'Each icon-only button needs a hidden text label describing its action, such as "Open menu" or "Close dialog."',
-    hoursPerInstance: [0.1, 0.3],
+    hoursPerInstance: [0.15, 0.45],
     devDetailTemplate: 'Buttons lack discernible text. WCAG 4.1.2 (A). Add aria-label to icon-only buttons.',
   },
   'label': {
@@ -66,7 +69,7 @@ const RULE_MAP = {
     plain:'Your forms are unusable for customers with disabilities',
     who:'Screen reader users hear only the placeholder text inside a field — which disappears the moment they start typing. They cannot tell what information goes where. This commonly affects contact, checkout, and signup forms.',
     fix:'Each form field needs a permanent, visible label connected to it. This is a quick fix for most forms but may require layout changes if the design relies on placeholder-only labels.',
-    hoursPerInstance: [0.25, 0.75],
+    hoursPerInstance: [0.4, 1.1],
     devDetailTemplate: 'Inputs lack programmatic label association. WCAG 1.3.1 (A), 4.1.2 (A). Requires <label for> or aria-labelledby on all inputs.',
   },
   'heading-order': {
@@ -74,7 +77,7 @@ const RULE_MAP = {
     plain:"Screen readers can't navigate your page structure",
     who:'Blind users navigate web pages by jumping between headings — like a table of contents. When headings are used for styling instead of structure, the page becomes disorienting and hard to use.',
     fix:'Your page headings are used for visual formatting rather than logical structure. A developer and content editor need to restructure the heading levels across your pages.',
-    hoursPerInstance: [0.5, 1.5],
+    hoursPerInstance: [0.75, 2.25],
     devDetailTemplate: 'Skipped or non-sequential heading levels. WCAG 1.3.1 (A). Requires semantic restructuring separate from visual styling.',
   },
   'page-has-heading-one': {
@@ -82,7 +85,7 @@ const RULE_MAP = {
     plain:'Your page has no main title for navigation tools',
     who:'Without a primary heading, screen reader users and search engines have no clear sense of the page topic — affecting both accessibility and SEO.',
     fix:'Add a single, descriptive top-level heading (H1) to the page that summarizes its content.',
-    hoursPerInstance: [0.25, 0.75],
+    hoursPerInstance: [0.4, 1.1],
     devDetailTemplate: 'Page is missing a level-one heading. WCAG 1.3.1 (A), 2.4.6 (AA).',
   },
   'html-has-lang': {
@@ -90,7 +93,7 @@ const RULE_MAP = {
     plain:'Screen readers may mispronounce your content',
     who:'Without a declared page language, screen readers may use the wrong pronunciation rules, voice, or Braille translation table for your content.',
     fix:"A single attribute needs to be added to your page's code declaring its language (e.g., English).",
-    hoursPerInstance: [0.1, 0.25],
+    hoursPerInstance: [0.15, 0.4],
     devDetailTemplate: 'The lang attribute on the <html> element is missing or invalid. WCAG 3.1.1 (A).',
   },
   'document-title': {
@@ -98,7 +101,7 @@ const RULE_MAP = {
     plain:'Your browser tabs and bookmarks show no useful page title',
     who:'Screen reader users hear the page title first when a page loads — it tells them where they are. Search engines and browser tabs also rely on it.',
     fix:'Add a descriptive <title> to the page reflecting its content and purpose.',
-    hoursPerInstance: [0.1, 0.25],
+    hoursPerInstance: [0.15, 0.4],
     devDetailTemplate: 'Document does not have a non-empty <title> element. WCAG 2.4.2 (A).',
   },
   'aria-allowed-attr': {
@@ -106,7 +109,7 @@ const RULE_MAP = {
     plain:'Some interactive elements have conflicting accessibility instructions',
     who:'Assistive technology may behave unpredictably or ignore the element entirely when accessibility attributes conflict with the element type.',
     fix:'A developer needs to review and correct the accessibility attributes on the flagged elements.',
-    hoursPerInstance: [0.25, 0.75],
+    hoursPerInstance: [0.4, 1.1],
     devDetailTemplate: 'Elements use ARIA attributes not allowed for their role. WCAG 4.1.2 (A).',
   },
   'aria-required-attr': {
@@ -114,7 +117,7 @@ const RULE_MAP = {
     plain:'Some custom controls are missing information assistive technology needs',
     who:'Screen readers cannot correctly announce the state or purpose of custom interactive elements (like custom dropdowns or sliders) without this information.',
     fix:'A developer needs to add the missing accessibility attributes to these custom components.',
-    hoursPerInstance: [0.25, 1],
+    hoursPerInstance: [0.4, 1.5],
     devDetailTemplate: 'Required ARIA attributes are missing for the given role. WCAG 4.1.2 (A).',
   },
   'duplicate-id-active': {
@@ -122,7 +125,7 @@ const RULE_MAP = {
     plain:'Some interactive elements may not work consistently',
     who:'Duplicate IDs on interactive elements can cause assistive technology to interact with the wrong element, leading to unpredictable behavior.',
     fix:'A developer needs to ensure every interactive element on the page has a unique identifier.',
-    hoursPerInstance: [0.25, 0.5],
+    hoursPerInstance: [0.4, 0.75],
     devDetailTemplate: 'Active elements share duplicate id attributes. WCAG 4.1.1 (A).',
   },
   'frame-title': {
@@ -130,7 +133,7 @@ const RULE_MAP = {
     plain:'Embedded content has no description for screen readers',
     who:'Embedded videos, maps, or widgets (iframes) with no title are announced as "frame" with no context, leaving users unsure what the content is.',
     fix:'Add a short, descriptive title attribute to each embedded frame describing its content (e.g., "Customer testimonial video").',
-    hoursPerInstance: [0.1, 0.25],
+    hoursPerInstance: [0.15, 0.4],
     devDetailTemplate: 'Frames lack an accessible title attribute. WCAG 2.4.1 (A), 4.1.2 (A).',
   },
   'list': {
@@ -138,7 +141,7 @@ const RULE_MAP = {
     plain:'Some lists on your page are not structured correctly',
     who:'Screen reader users rely on proper list structure to understand grouped content and navigate between items efficiently.',
     fix:'A developer needs to correct the underlying HTML so lists use proper list markup.',
-    hoursPerInstance: [0.25, 0.5],
+    hoursPerInstance: [0.4, 0.75],
     devDetailTemplate: 'List items (<li>) are not contained within <ul> or <ol>. WCAG 1.3.1 (A).',
   },
   'meta-viewport': {
@@ -146,7 +149,7 @@ const RULE_MAP = {
     plain:'Some users may not be able to zoom in on your site',
     who:'Users with low vision who need to zoom in to read content are blocked from doing so, making the site unusable for them.',
     fix:'Update the page configuration to allow users to zoom and resize text.',
-    hoursPerInstance: [0.1, 0.25],
+    hoursPerInstance: [0.15, 0.4],
     devDetailTemplate: 'Viewport meta tag disables zoom (user-scalable=no or maximum-scale<2). WCAG 1.4.4 (AA).',
   },
 }
@@ -158,17 +161,17 @@ const DEFAULT_TEMPLATE = (rule) => ({
   plain: rule.help,
   who: rule.description,
   fix: 'Review the affected elements and apply the recommended fix from the linked accessibility guidance.',
-  hoursPerInstance: [0.25, 1],
+  hoursPerInstance: [0.4, 1.5],
   devDetailTemplate: `${rule.id}. ${rule.helpUrl || ''}`,
 })
 
-const HOURLY_RATE = 150
+const HOURLY_RATE = 175
 
 function buildIssue(rule, nodeCount) {
   const template = RULE_MAP[rule.id] || DEFAULT_TEMPLATE(rule)
   const [hrLo, hrHi] = template.hoursPerInstance
-  const totalHrLo = Math.max(0.5, +(hrLo * nodeCount).toFixed(1))
-  const totalHrHi = Math.max(1,   +(hrHi * nodeCount).toFixed(1))
+  const totalHrLo = Math.max(0.75, +(hrLo * nodeCount).toFixed(1))
+  const totalHrHi = Math.max(1.5,  +(hrHi * nodeCount).toFixed(1))
   return {
     id: template.id,
     risk: template.risk,

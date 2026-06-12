@@ -63,9 +63,16 @@ function LeadModal({ onClose, onSubmit, auditData }) {
         lead: form,
       })
       doc.save(`Hex5-Parity-Audit-${(auditData.target||'report').replace(/[^a-z0-9]/gi,'-')}.pdf`)
+      const pdfBase64 = doc.output('datauristring').split(',')[1]
       await fetch('/api/submit-lead', {
         method:'POST', headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({ ...form, auditTarget:auditData.target, score:auditData.score })
+        body: JSON.stringify({
+          ...form,
+          auditTarget:auditData.target,
+          score:auditData.score,
+          pdfBase64,
+          pdfFilename: `Hex5-Parity-Audit-${(auditData.target||'report').replace(/[^a-z0-9]/gi,'-')}.pdf`,
+        })
       })
     } catch(e) { console.error(e) }
     setLoading(false)
@@ -278,6 +285,15 @@ function Results({ target, data, onGetReport }) {
           </div>
         ))}
       </div>
+
+      {/* ── Scope caveat ── */}
+      <p style={{ fontSize:11.5, color:H5.muted, lineHeight:1.6, margin:'8px 0 16px',
+        padding:'0 2px' }}>
+        Estimate reflects only the issues detected on this single page. Most sites share
+        templates across many pages, and a full manual review often surfaces additional
+        issues automated scans cannot detect — total project scope is often higher than
+        shown here.
+      </p>
 
       {/* ── Context bar ── */}
       <div style={{ background:riskColor.bg, border:`1px solid ${riskColor.fg}33`,
