@@ -205,28 +205,38 @@ export default async function handler(req, res) {
 
   let browser
   try {
+    const t0 = Date.now()
+    console.log('[scan] connecting to Browserless...')
+
     browser = await chromium.connect(
-      `wss://production-sfo.browserless.io?token=${browserlessToken}`
+      `wss://production-sfo.browserless.io?token=${browserlessToken}`,
+      { timeout: 15000 }
     )
+    console.log(`[scan] connected in ${Date.now() - t0}ms`)
 
     const context = await browser.newContext({
       viewport: { width: 1280, height: 800 },
       userAgent: 'Mozilla/5.0 (compatible; Hex5ParityBot/1.0; +https://hex5digital.com/parity)',
     })
     const page = await context.newPage()
+    console.log(`[scan] context+page ready at ${Date.now() - t0}ms`)
 
     await page.goto(url, { waitUntil: 'load', timeout: 20000 })
+    console.log(`[scan] page loaded at ${Date.now() - t0}ms`)
 
     // Brief settle time for late-loading content (images, fonts, lazy
     // elements) without waiting for full network idle, which can hang
     // indefinitely on sites with analytics/chat widgets/etc.
     await page.waitForTimeout(1500)
+    console.log(`[scan] settle done at ${Date.now() - t0}ms`)
 
     const axeResults = await new AxeBuilder({ page })
       .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'])
       .analyze()
+    console.log(`[scan] axe analysis done at ${Date.now() - t0}ms`)
 
     await browser.close()
+    console.log(`[scan] browser closed at ${Date.now() - t0}ms`)
 
     const issues = axeResults.violations
       .map(v => buildIssue(v, v.nodes.length))
