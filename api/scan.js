@@ -202,6 +202,7 @@ export default async function handler(req, res) {
     console.error('Scan error: BROWSERLESS_TOKEN environment variable is not set')
     return res.status(500).json({ error: 'config_error', message: 'Scanning is temporarily unavailable. Please try again later.' })
   }
+  console.log(`[scan] token present, length=${browserlessToken.length}, first4=${browserlessToken.slice(0,4)}, last4=${browserlessToken.slice(-4)}`)
 
   let browser
   try {
