@@ -61,11 +61,11 @@ const STANDARDS = [
 // ── Global CSS ─────────────────────────────────────────────────────
 const GLOBAL_CSS = `
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #F8FAFC; }
+  body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #F8FAFC; }
   :focus-visible { outline: 3px solid #00D4FF; outline-offset: 3px; }
-  button { cursor: pointer; }
+  button { cursor: pointer; font-family: inherit; }
   button, a, input, select, textarea { min-height: 44px; }
-  .skip-link { position:absolute; top:-100px; left:0; background:#19335A; color:#fff;
+  .skip-link { position:absolute; top:-100px; left:0; background:#0A0F1E; color:#fff;
     padding:12px 20px; font-weight:600; font-size:14px; z-index:9999; text-decoration:none; }
   .skip-link:focus { top:0; }
   .sr-only { position:absolute; width:1px; height:1px; padding:0; margin:-1px;
@@ -73,24 +73,26 @@ const GLOBAL_CSS = `
   @keyframes spin { to { transform: rotate(360deg); } }
   @keyframes blink { 0%, 100% { opacity:1 } 50% { opacity:0 } }
   @media (prefers-reduced-motion: reduce) {
-    *, *::before, *::after { animation-duration: 0.01ms !important; }
+    *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
   }
 
   /* ── Mobile overrides (< 640px) ── */
   @media (max-width: 639px) {
     .url-input-row { flex-direction: column !important; }
     .url-input-row input { border-bottom: 1px solid rgba(255,255,255,0.1) !important; }
-    .url-input-row button { border-left: none !important; border-top: 2px solid #00D4FF !important; width: 100% !important; }
+    .url-input-row button { border-left: none !important; border-top: 2px solid #00D4FF !important;
+      width: 100% !important; min-height: 52px !important; justify-content: center !important; }
     .lead-form-grid { grid-template-columns: 1fr !important; }
     .big-three-grid { grid-template-columns: 1fr !important; }
     .big-three-grid > div { border-bottom: 1px solid #B0BAC4; }
     .steps-grid { grid-template-columns: 1fr !important; }
     .cant-see-grid { grid-template-columns: 1fr !important; }
-    .creds-grid { grid-template-columns: 1fr !important; }
     .context-bar { flex-direction: column !important; align-items: flex-start !important; }
-    .context-bar-buttons { flex-direction: column !important; width: 100%; }
-    .context-bar-buttons button, .context-bar-buttons a { width: 100% !important; text-align: center !important; }
+    .bottom-cta-top { flex-direction: column !important; }
+    .benchmark-row { flex-direction: column !important; gap: 10px !important; }
+    .nav-link-row { flex-wrap: wrap !important; overflow-x: visible !important; }
     nav[aria-label="Site navigation"] { padding: 14px 20px !important; }
+    .results-nav { padding: 0 20px !important; min-height: 52px !important; }
   }
 `
 
@@ -518,15 +520,11 @@ function Results({ target, data, onGetReport, onScanUrl, onEmailReport, unlocked
         </p>
       </div>
 
-      {/* Disclaimers */}
-      <p style={{ fontSize:11.5, color:H5.muted, lineHeight:1.6, margin:'8px 0 4px', padding:'0 2px' }}>
-        Estimate reflects only the issues detected on this single page. Where possible,
-        we've flagged issues in your site's shared header, navigation, footer, or
-        global stylesheet as <strong>likely site-wide</strong> — but a full manual
-        review often surfaces additional issues automated scans cannot detect.
-      </p>
-      <p style={{ fontSize:11.5, color:H5.muted, lineHeight:1.6, margin:'0 0 16px', padding:'0 2px' }}>
-        This is an automated screening tool, not a legal opinion — think of it as the tip of the iceberg.
+      {/* Brief disclaimer — detailed notice already shown in results header above */}
+      <p style={{ fontSize:11.5, color:H5.muted, lineHeight:1.6, margin:'8px 0 16px', padding:'0 2px' }}>
+        Cost estimates are based on Hex5 Digital's typical project rates. Where possible,
+        issues found in shared site templates are flagged as <strong>likely site-wide</strong>.
+        This is not a legal opinion.
       </p>
 
       {/* ── HIGH SCORE FLOW (80+) ── */}
@@ -1034,7 +1032,7 @@ export default function App() {
                   style={{ flex:1, padding:'15px 20px', fontSize:15, border:'none',
                     outline:'none', color:'#fff', background:'transparent',
                     fontFamily:"'Inter', sans-serif" }} />
-                <button onClick={runScan}
+                <button onClick={() => runScan()}
                   style={{ padding:'15px 28px', border:'none', background:'#0078BD',
                     color:'#fff', fontSize:14, fontWeight:700, cursor:'pointer',
                     whiteSpace:'nowrap', fontFamily:"'Inter', sans-serif",
@@ -1163,43 +1161,70 @@ export default function App() {
       )}
 
       {/* ── Results wrapper ── */}
-      <div style={{ maxWidth:860, margin:'0 auto', padding:'0 24px 64px' }}>
+      <div>
+        {/* Dark results nav — mirrors hero nav */}
         {scanned && !loading && (
-          <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between',
-            padding:'14px 0', borderBottom:`1px solid ${H5.border}`, marginBottom:24,
-            flexWrap:'wrap', gap:10 }}>
-            <div style={{ display:'flex', alignItems:'center', gap:12 }}>
-              <img src="/logo-dark.png" alt="Hex5 Digital" style={{ height:22 }} />
-              <span aria-hidden="true" style={{ width:1, height:14, background:H5.border }} />
-              <span style={{ fontFamily:"'JetBrains Mono', monospace", fontSize:11,
-                color:H5.secondary, fontWeight:700, letterSpacing:'1px',
-                textTransform:'uppercase' }}>Parity</span>
+          <div style={{ background:'#0A0F1E', borderBottom:'1px solid rgba(255,255,255,0.06)' }}>
+            <div className="results-nav" style={{ maxWidth:860, margin:'0 auto', padding:'0 24px',
+              display:'flex', alignItems:'center', justifyContent:'space-between',
+              minHeight:56, flexWrap:'wrap', gap:10 }}>
+              <div style={{ display:'flex', alignItems:'center', gap:12 }}>
+                <img src="/logo-white.png" alt="Hex5 Digital" style={{ height:22 }} />
+                <span aria-hidden="true" style={{ width:1, height:14, background:'rgba(255,255,255,0.2)' }} />
+                <span style={{ fontFamily:"'JetBrains Mono', monospace", fontSize:11,
+                  color:'rgba(0,212,255,0.7)', fontWeight:700, letterSpacing:'1px',
+                  textTransform:'uppercase' }}>Parity</span>
+              </div>
+              <button onClick={() => { setScanned(false); setScanData(null); setUrl('') }}
+                style={{ fontSize:12, color:'rgba(0,212,255,0.8)', background:'none',
+                  border:'1px solid rgba(0,212,255,0.2)', cursor:'pointer', padding:'6px 14px',
+                  fontFamily:"'Inter', sans-serif", minHeight:'auto' }}>
+                ← New scan
+              </button>
             </div>
-            <button onClick={() => { setScanned(false); setScanData(null); setUrl('') }}
-              style={{ fontSize:12, color:H5.secondary, background:'none',
-                border:'none', cursor:'pointer', textDecoration:'underline',
-                padding:0, minHeight:'auto' }}>
-              ← New scan
-            </button>
           </div>
         )}
+
+        <div style={{ maxWidth:860, margin:'0 auto', padding:'0 24px 64px' }}>
 
         <main id="main-content" tabIndex={-1} ref={mainRef} style={{ outline:'none' }}>
           {scanned && !loading && scanData && (
             <>
-              <div style={{ display:'flex', alignItems:'center', gap:10,
-                marginBottom:20, flexWrap:'wrap' }}>
-                <div style={{ fontSize:13, color:H5.muted }}>
-                  Results for <strong style={{ color:H5.primary }}>{scanData.url}</strong>
-                  {scanData.standard && (
-                    <span style={{ marginLeft:8, fontSize:10.5, fontWeight:700,
-                      color:H5.secondary, background:'#EBF5FC',
-                      padding:'2px 8px', textTransform:'uppercase', letterSpacing:'0.5px',
-                      fontFamily:"'JetBrains Mono', monospace" }}>
-                      {scanData.standard}
-                    </span>
-                  )}
+              {/* Results header — URL, standard, single-page caveat */}
+              <div style={{ paddingTop:24, marginBottom:20 }}>
+                <div style={{ display:'flex', alignItems:'center', gap:10, flexWrap:'wrap', marginBottom:10 }}>
+                  <div style={{ fontSize:13, color:H5.muted }}>
+                    Results for <strong style={{ color:H5.primary }}>{scanData.url}</strong>
+                    {scanData.standard && (
+                      <span style={{ marginLeft:8, fontSize:10.5, fontWeight:700,
+                        color:H5.secondary, background:'#EBF5FC',
+                        padding:'2px 8px', textTransform:'uppercase', letterSpacing:'0.5px',
+                        fontFamily:"'JetBrains Mono', monospace" }}>
+                        {scanData.standard}
+                      </span>
+                    )}
+                  </div>
                 </div>
+                {/* Prominent single-page + iceberg notice */}
+                <div role="note" style={{ background:'#FFF8E7',
+                  border:'1px solid #D97706', borderLeft:'4px solid #D97706',
+                  padding:'12px 16px', display:'flex', gap:12, alignItems:'flex-start' }}>
+                  <span aria-hidden="true" style={{ fontSize:18, flexShrink:0 }}>⚠️</span>
+                  <div>
+                    <p style={{ fontSize:13, fontWeight:700, color:'#92400E', marginBottom:4 }}>
+                      This scan covers one page only — and automated tools only catch 30–40% of real issues.
+                    </p>
+                    <p style={{ fontSize:12.5, color:'#78350F', lineHeight:1.6, margin:0 }}>
+                      What you see below is the tip of the iceberg. Issues in your navigation,
+                      templates, PDFs, videos, and other pages won't appear here. A full manual
+                      audit by our accessibility team is the only way to know your complete exposure.
+                    </p>
+                  </div>
+                </div>
+              </div>
+              {/* Live region announces when issue detail is unlocked */}
+              <div aria-live="polite" aria-atomic="true" className="sr-only">
+                {unlocked ? 'Issue details unlocked. Full breakdown now visible below.' : ''}
               </div>
               <Results
                 target={scanData.url}
@@ -1213,6 +1238,7 @@ export default function App() {
             </>
           )}
         </main>
+        </div>
       </div>
 
       {showModal && scanData && (
