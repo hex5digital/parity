@@ -451,22 +451,22 @@ function IssueCard({ issue }) {
 }
 
 // ── Results ────────────────────────────────────────────────────────
-function Results({ target, data, onGetReport, onScanUrl, onEmailReport }) {
+function Results({ target, data, onGetReport, onScanUrl, onEmailReport, unlocked, onUnlock }) {
   const { issues, score, totalDollarMin, totalDollarMax, navLinks, standard } = data
   const [nextUrl, setNextUrl] = useState('')
   const [showAllLinks, setShowAllLinks] = useState(false)
-  const highRisk = issues.filter(i=>i.risk==='high')
-  const medRisk  = issues.filter(i=>i.risk==='medium')
-  const lowRisk  = issues.filter(i=>i.risk==='low')
+
+  const highRisk  = issues.filter(i=>i.risk==='high')
+  const medRisk   = issues.filter(i=>i.risk==='medium')
+  const lowRisk   = issues.filter(i=>i.risk==='low')
   const critCount = highRisk.length
   const riskLabel = critCount >= 3 ? 'High' : critCount >= 1 ? 'Medium' : 'Low'
   const riskColor = critCount >= 3 ? H5.risk.high : critCount >= 1 ? H5.risk.medium : H5.risk.low
-
-  const noIssues = issues.length === 0
+  const noIssues  = issues.length === 0
+  const isHighScore = score >= 80
 
   return (
     <div>
-      {/* Visually-hidden h1 for screen reader heading hierarchy on results page */}
       <h1 className="sr-only">
         Accessibility audit results for {target}{standard ? ` — ${standard}` : ''}
       </h1>
@@ -475,11 +475,11 @@ function Results({ target, data, onGetReport, onScanUrl, onEmailReport }) {
       <div className="big-three-grid" style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(180px,1fr))',
         gap:2, marginBottom:2, border:`1px solid ${H5.border}` }}>
         {[
-          { val:score,                      sub:'out of 100',        label:'Accessibility score',
+          { val:score, sub:'out of 100', label:'Accessibility score',
             color: score>=80?H5.risk.low.fg:score>=50?H5.risk.medium.fg:H5.risk.high.fg },
-          { val:riskLabel,                  sub:'legal risk level',  label:'Your exposure',        color:riskColor.fg },
-          { val: noIssues ? '$0' : `${fmt(totalDollarMin)}–${fmt(totalDollarMax)}`, sub:'estimated to remediate',
-            label:'Remediation cost',       color:H5.secondary },
+          { val:riskLabel, sub:'legal risk level', label:'Your exposure', color:riskColor.fg },
+          { val: noIssues ? '$0' : `${fmt(totalDollarMin)}–${fmt(totalDollarMax)}`,
+            sub:'estimated to remediate', label:'Remediation cost', color:H5.secondary },
         ].map(c => (
           <div key={c.label} style={{ background:'#fff', padding:'24px 20px', textAlign:'center' }}>
             <div className="score-val" style={{ fontSize:32, fontWeight:700, color:c.color, lineHeight:1 }}>{c.val}</div>
@@ -499,8 +499,7 @@ function Results({ target, data, onGetReport, onScanUrl, onEmailReport }) {
             <span>Your score: <strong style={{ color: score>=80?H5.risk.low.fg:score>=50?H5.risk.medium.fg:H5.risk.high.fg }}>{score}</strong></span>
             <span>Industry average: <strong>57</strong></span>
           </div>
-          <div role="img"
-            aria-label={`Score ${score} out of 100. Industry average is 57.`}
+          <div role="img" aria-label={`Score ${score} out of 100. Industry average is 57.`}
             style={{ position:'relative', height:6, background:H5.light, borderRadius:3 }}>
             <div aria-hidden="true" style={{ position:'absolute', left:'57%', top:-3, width:2, height:12,
               background:H5.muted, borderRadius:1 }} />
@@ -518,87 +517,193 @@ function Results({ target, data, onGetReport, onScanUrl, onEmailReport }) {
           }
         </p>
       </div>
-      <p style={{ fontSize:11.5, color:H5.muted, lineHeight:1.6, margin:'8px 0 8px',
-        padding:'0 2px' }}>
+
+      {/* Disclaimers */}
+      <p style={{ fontSize:11.5, color:H5.muted, lineHeight:1.6, margin:'8px 0 4px', padding:'0 2px' }}>
         Estimate reflects only the issues detected on this single page. Where possible,
-        we've flagged issues found in your site's shared header, navigation, footer, or
+        we've flagged issues in your site's shared header, navigation, footer, or
         global stylesheet as <strong>likely site-wide</strong> — but a full manual
-        review often surfaces additional issues automated scans cannot detect, and
-        total project scope is often higher than shown here.
+        review often surfaces additional issues automated scans cannot detect.
+      </p>
+      <p style={{ fontSize:11.5, color:H5.muted, lineHeight:1.6, margin:'0 0 16px', padding:'0 2px' }}>
+        This is an automated screening tool, not a legal opinion — think of it as the tip of the iceberg.
       </p>
 
-      {/* ── Legal + "tip of the iceberg" disclaimer ── */}
-      <p style={{ fontSize:11.5, color:H5.muted, lineHeight:1.6, margin:'0 0 16px',
-        padding:'0 2px' }}>
-        This scan is an automated screening tool, not a legal opinion or a substitute
-        for a full accessibility audit. It is intended to give you a general sense of
-        your exposure and is not a complete inventory of every issue on your site —
-        think of it as the tip of the iceberg. A conversation with our accessibility
-        team, including a full manual review, is the only way to identify everything
-        that may affect your legal risk and your customers.
-      </p>
-
-      {/* ── Context bar ── */}
-      <div className="context-bar" style={{ background:riskColor.bg, border:`1px solid ${riskColor.fg}33`,
-        borderTop:'none', padding:'14px 20px', marginBottom:24,
-        display:'flex', alignItems:'center', justifyContent:'space-between', flexWrap:'wrap', gap:12 }}>
-        <p style={{ fontSize:13.5, color:riskColor.fg, lineHeight:1.6, margin:0, maxWidth:560 }}>
-          {noIssues
-            ? "Great news — our automated scan found no high or medium risk issues on this page. A full manual review is still recommended to catch issues automated tools can't detect."
-            : critCount >= 3
-            ? `Your site has ${critCount} high-risk issues that are commonly cited in ADA Title III web accessibility lawsuits. Over 4,000 such lawsuits were filed in 2023. Remediation typically resolves legal exposure within 60–90 days.`
-            : critCount >= 1
-            ? `Your site has ${critCount} high-risk issue${critCount>1?'s':''} that could attract legal attention. Addressing these first significantly reduces your exposure.`
-            : 'No high-risk issues found. Address medium-risk items to reach full WCAG 2.2 AA compliance.'
-          }
-        </p>
-        <div className="context-bar-buttons" style={{ display:'flex', gap:8, flexWrap:'wrap' }}>
-          <button onClick={onGetReport}
-            style={{ padding:'12px 24px', border:'none', background:H5.secondary,
-              color:'#fff', fontSize:14, fontWeight:700, cursor:'pointer', whiteSpace:'nowrap',
-              borderLeft:`3px solid ${H5.tertiary}` }}>
-            Get the full report →
-          </button>
-          <button onClick={onEmailReport}
-            style={{ padding:'12px 18px', border:`1px solid ${riskColor.fg}`, background:'transparent',
-              color:riskColor.fg, fontSize:13.5, fontWeight:600, cursor:'pointer', whiteSpace:'nowrap' }}>
-            Email me this
-          </button>
+      {/* ── HIGH SCORE FLOW (80+) ── */}
+      {isHighScore && (
+        <div style={{ background:'#F0FDF4', border:`1px solid ${H5.risk.low.fg}44`,
+          padding:'20px 24px', marginBottom:24 }}>
+          <div style={{ display:'flex', alignItems:'flex-start', gap:16, flexWrap:'wrap' }}>
+            <div style={{ flex:1 }}>
+              <p style={{ fontSize:15, fontWeight:700, color:H5.risk.low.fg, marginBottom:8 }}>
+                {noIssues
+                  ? 'No automated issues found — your homepage looks clean.'
+                  : `Your homepage is above average with ${issues.length} minor item${issues.length>1?'s':''} to address.`
+                }
+              </p>
+              <p style={{ fontSize:13.5, color:'#374151', lineHeight:1.7, marginBottom:12 }}>
+                Automated scans only catch 30–40% of real-world accessibility issues. Even
+                clean-scoring sites often have gaps in keyboard navigation, screen reader flow,
+                PDFs, and video captions that only a manual review can surface.
+              </p>
+              <p style={{ fontSize:13, color:'#374151', lineHeight:1.7 }}>
+                Want to confirm your full-site coverage? Our team can run a complete
+                manual audit — and alert you if anything changes as your content updates.
+              </p>
+            </div>
+            <div style={{ display:'flex', flexDirection:'column', gap:8, flexShrink:0 }}>
+              <button onClick={onEmailReport}
+                style={{ padding:'12px 20px', border:'none', background:H5.risk.low.fg,
+                  color:'#fff', fontSize:13.5, fontWeight:700, cursor:'pointer', whiteSpace:'nowrap' }}>
+                Get a free consultation →
+              </button>
+              {!noIssues && (
+                <button onClick={onGetReport}
+                  style={{ padding:'10px 20px', border:`1px solid ${H5.risk.low.fg}`,
+                    background:'transparent', color:H5.risk.low.fg, fontSize:13,
+                    fontWeight:600, cursor:'pointer', whiteSpace:'nowrap' }}>
+                  See the {issues.length} minor item{issues.length>1?'s':''}
+                </button>
+              )}
+            </div>
+          </div>
         </div>
-      </div>
-
-      {/* ── Issues — high risk first ── */}
-      {highRisk.length > 0 && (
-        <section aria-label="High risk issues" style={{ marginBottom:24 }}>
-          <h2 style={{ fontSize:13, fontWeight:700, color:H5.risk.high.fg,
-            textTransform:'uppercase', letterSpacing:'0.6px', marginBottom:10,
-            paddingBottom:8, borderBottom:`2px solid ${H5.risk.high.fg}` }}>
-            High legal risk — fix these first ({highRisk.length})
-          </h2>
-          {highRisk.map(i => <IssueCard key={i.id} issue={i} />)}
-        </section>
       )}
 
-      {medRisk.length > 0 && (
-        <section aria-label="Medium risk issues" style={{ marginBottom:24 }}>
-          <h2 style={{ fontSize:13, fontWeight:700, color:H5.risk.medium.fg,
-            textTransform:'uppercase', letterSpacing:'0.6px', marginBottom:10,
-            paddingBottom:8, borderBottom:`2px solid ${H5.risk.medium.fg}` }}>
-            Medium risk — address after high-risk fixes ({medRisk.length})
-          </h2>
-          {medRisk.map(i => <IssueCard key={i.id} issue={i} />)}
-        </section>
+      {/* ── LOW/MEDIUM SCORE — issue teaser + gate ── */}
+      {!isHighScore && !unlocked && (
+        <div style={{ background:'#fff', border:`1px solid ${H5.border}`,
+          padding:'20px 24px', marginBottom:24 }}>
+          {/* Issue count teasers */}
+          <div style={{ display:'flex', gap:10, flexWrap:'wrap', marginBottom:16 }}>
+            {highRisk.length > 0 && (
+              <div style={{ display:'flex', alignItems:'center', gap:12,
+                background:H5.risk.high.bg, padding:'12px 16px', flex:'1 1 160px' }}>
+                <div style={{ fontSize:32, fontWeight:700, color:H5.risk.high.fg, lineHeight:1,
+                  fontFamily:"'JetBrains Mono', monospace" }}>{highRisk.length}</div>
+                <div>
+                  <div style={{ fontSize:11.5, fontWeight:700, color:H5.risk.high.fg,
+                    textTransform:'uppercase', letterSpacing:'0.4px' }}>High legal risk</div>
+                  <div style={{ fontSize:11, color:H5.risk.high.fg, opacity:0.75, marginTop:2 }}>
+                    {highRisk.length === 1 ? 'issue' : 'issues'} — commonly cited in ADA lawsuits
+                  </div>
+                </div>
+              </div>
+            )}
+            {medRisk.length > 0 && (
+              <div style={{ display:'flex', alignItems:'center', gap:12,
+                background:H5.risk.medium.bg, padding:'12px 16px', flex:'1 1 160px' }}>
+                <div style={{ fontSize:32, fontWeight:700, color:H5.risk.medium.fg, lineHeight:1,
+                  fontFamily:"'JetBrains Mono', monospace" }}>{medRisk.length}</div>
+                <div>
+                  <div style={{ fontSize:11.5, fontWeight:700, color:H5.risk.medium.fg,
+                    textTransform:'uppercase', letterSpacing:'0.4px' }}>Medium risk</div>
+                  <div style={{ fontSize:11, color:H5.risk.medium.fg, opacity:0.75, marginTop:2 }}>
+                    {medRisk.length === 1 ? 'issue' : 'issues'} — address after high-risk fixes
+                  </div>
+                </div>
+              </div>
+            )}
+            {lowRisk.length > 0 && (
+              <div style={{ display:'flex', alignItems:'center', gap:12,
+                background:H5.light, border:`1px solid ${H5.border}`, padding:'12px 16px', flex:'1 1 160px' }}>
+                <div style={{ fontSize:32, fontWeight:700, color:H5.muted, lineHeight:1,
+                  fontFamily:"'JetBrains Mono', monospace" }}>{lowRisk.length}</div>
+                <div>
+                  <div style={{ fontSize:11.5, fontWeight:700, color:H5.muted,
+                    textTransform:'uppercase', letterSpacing:'0.4px' }}>Lower priority</div>
+                  <div style={{ fontSize:11, color:H5.muted, marginTop:2 }}>
+                    {lowRisk.length === 1 ? 'issue' : 'issues'} — good to address over time
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Gate */}
+          <div style={{ borderTop:`1px solid ${H5.border}`, paddingTop:16 }}>
+            <p style={{ fontSize:14.5, fontWeight:700, color:H5.primary, marginBottom:6 }}>
+              {critCount >= 3
+                ? `Your site has ${critCount} high-risk issues that commonly appear in ADA Title III lawsuits.`
+                : critCount >= 1
+                ? `Your site has ${critCount} high-risk issue${critCount>1?'s':''} that could attract legal attention.`
+                : `Your site has ${medRisk.length} issue${medRisk.length>1?'s':''} to address for full compliance.`
+              }
+            </p>
+            <p style={{ fontSize:13, color:H5.muted, lineHeight:1.6, marginBottom:16 }}>
+              Enter your details to see exactly what they are, who they affect, and what it
+              would cost to fix — plus get a branded PDF report to share with your team.
+            </p>
+            <button onClick={onGetReport}
+              style={{ padding:'14px 28px', border:'none', background:H5.secondary,
+                color:'#fff', fontSize:15, fontWeight:700, cursor:'pointer',
+                borderLeft:`3px solid ${H5.tertiary}`, display:'block',
+                width:'100%', maxWidth:400, textAlign:'left' }}>
+              See what's broken and how to fix it →
+            </button>
+            <p style={{ fontSize:11.5, color:H5.muted, marginTop:8 }}>
+              Free. Takes 30 seconds. You'll also get a PDF report to share with your team.
+            </p>
+          </div>
+        </div>
       )}
 
-      {lowRisk.length > 0 && (
-        <section aria-label="Low risk issues" style={{ marginBottom:24 }}>
-          <h2 style={{ fontSize:13, fontWeight:700, color:H5.muted,
-            textTransform:'uppercase', letterSpacing:'0.6px', marginBottom:10,
-            paddingBottom:8, borderBottom:`2px solid ${H5.border}` }}>
-            Lower priority ({lowRisk.length})
-          </h2>
-          {lowRisk.map(i => <IssueCard key={i.id} issue={i} />)}
-        </section>
+      {/* ── UNLOCKED or HIGH SCORE — full issue list ── */}
+      {(unlocked || isHighScore) && issues.length > 0 && (
+        <>
+          {unlocked && (
+            <div className="context-bar" style={{ background:riskColor.bg, border:`1px solid ${riskColor.fg}33`,
+              padding:'14px 20px', marginBottom:24,
+              display:'flex', alignItems:'center', justifyContent:'space-between', flexWrap:'wrap', gap:12 }}>
+              <p style={{ fontSize:13.5, color:riskColor.fg, lineHeight:1.6, margin:0, maxWidth:560 }}>
+                {critCount >= 3
+                  ? `Your site has ${critCount} high-risk issues commonly cited in ADA Title III lawsuits. Remediation typically resolves legal exposure within 60–90 days.`
+                  : critCount >= 1
+                  ? `Your site has ${critCount} high-risk issue${critCount>1?'s':''} that could attract legal attention. Addressing these first significantly reduces your exposure.`
+                  : 'No high-risk issues found. Address medium-risk items to reach full compliance.'
+                }
+              </p>
+              <button onClick={onEmailReport}
+                style={{ padding:'10px 18px', border:`1px solid ${riskColor.fg}`, background:'transparent',
+                  color:riskColor.fg, fontSize:13, fontWeight:600, cursor:'pointer', whiteSpace:'nowrap' }}>
+                Email me this
+              </button>
+            </div>
+          )}
+
+          {highRisk.length > 0 && (
+            <section aria-label="High risk issues" style={{ marginBottom:24 }}>
+              <h2 style={{ fontSize:13, fontWeight:700, color:H5.risk.high.fg,
+                textTransform:'uppercase', letterSpacing:'0.6px', marginBottom:10,
+                paddingBottom:8, borderBottom:`2px solid ${H5.risk.high.fg}` }}>
+                High legal risk — fix these first ({highRisk.length})
+              </h2>
+              {highRisk.map(i => <IssueCard key={i.id} issue={i} />)}
+            </section>
+          )}
+
+          {medRisk.length > 0 && (
+            <section aria-label="Medium risk issues" style={{ marginBottom:24 }}>
+              <h2 style={{ fontSize:13, fontWeight:700, color:H5.risk.medium.fg,
+                textTransform:'uppercase', letterSpacing:'0.6px', marginBottom:10,
+                paddingBottom:8, borderBottom:`2px solid ${H5.risk.medium.fg}` }}>
+                Medium risk — address after high-risk fixes ({medRisk.length})
+              </h2>
+              {medRisk.map(i => <IssueCard key={i.id} issue={i} />)}
+            </section>
+          )}
+
+          {lowRisk.length > 0 && (
+            <section aria-label="Low risk issues" style={{ marginBottom:24 }}>
+              <h2 style={{ fontSize:13, fontWeight:700, color:H5.muted,
+                textTransform:'uppercase', letterSpacing:'0.6px', marginBottom:10,
+                paddingBottom:8, borderBottom:`2px solid ${H5.border}` }}>
+                Lower priority ({lowRisk.length})
+              </h2>
+              {lowRisk.map(i => <IssueCard key={i.id} issue={i} />)}
+            </section>
+          )}
+        </>
       )}
 
       {noIssues && (
@@ -607,8 +712,7 @@ function Results({ target, data, onGetReport, onScanUrl, onEmailReport }) {
           <div style={{ fontSize:32, marginBottom:10 }} role="img" aria-label="Checkmark">✅</div>
           <p style={{ fontSize:14.5, color:'#374151', lineHeight:1.8, maxWidth:480, margin:'0 auto' }}>
             No automated issues found on this page. Automated scans typically catch
-            30–40% of real-world accessibility issues — a full manual review by
-            our team can confirm the rest.
+            30–40% of real-world issues — a full manual review can confirm the rest.
           </p>
         </div>
       )}
@@ -622,8 +726,7 @@ function Results({ target, data, onGetReport, onScanUrl, onEmailReport }) {
         </h2>
         <p style={{ fontSize:12.5, color:H5.muted, lineHeight:1.7, marginBottom:14 }}>
           Automated tools detect roughly 30–40% of real-world accessibility barriers.
-          The issues below require a manual review by our accessibility team — and are
-          just as likely to appear in litigation as the automated findings above.
+          The items below require a manual review — and are just as likely to appear in litigation.
         </p>
         <div className="cant-see-grid" style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(200px,1fr))',
           gap:10 }}>
@@ -631,8 +734,8 @@ function Results({ target, data, onGetReport, onScanUrl, onEmailReport }) {
             { icon:'🎹', title:'Keyboard navigation', desc:'Can a user tab through your entire site without a mouse? Screen reader and motor-impaired users depend on this.' },
             { icon:'🔊', title:'Screen reader flow', desc:'Does your content read in the right order? Are dynamic updates announced? Only a real screen reader test reveals this.' },
             { icon:'📄', title:'PDFs & documents', desc:'Downloadable files have their own WCAG requirements. Most PDFs on the web fail basic accessibility checks.' },
-            { icon:'🎬', title:'Video captions & audio', desc:'Auto-generated captions often contain errors that make them non-compliant. Transcripts and audio descriptions may also be required.' },
-            { icon:'🧠', title:'Cognitive accessibility', desc:'Plain language, consistent navigation, and clear error messages — these affect users with cognitive disabilities and aren\'t detectable by scanners.' },
+            { icon:'🎬', title:'Video captions & audio', desc:'Auto-generated captions often contain errors. Transcripts and audio descriptions may also be required.' },
+            { icon:'🧠', title:'Cognitive accessibility', desc:"Plain language, consistent navigation, clear error messages — these aren't detectable by scanners." },
           ].map(item => (
             <div key={item.title} style={{ background:'#fff', padding:'14px 16px',
               border:`1px solid ${H5.border}` }}>
@@ -651,53 +754,53 @@ function Results({ target, data, onGetReport, onScanUrl, onEmailReport }) {
         </p>
       </div>
 
-      {/* ── Bottom CTA ── */}
-      <div style={{ background:H5.primary, padding:'28px 24px',
-        borderLeft:`4px solid ${H5.secondary}` }}>
-        <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between',
-          flexWrap:'wrap', gap:16, marginBottom:20 }}>
-          <div>
-            <h2 style={{ color:'#fff', fontSize:16, fontWeight:700, marginBottom:6 }}>
-              Ready to fix this?
-            </h2>
-            <div style={{ color:'#A8C4DC', fontSize:13.5, lineHeight:1.6, maxWidth:480 }}>
-              The estimate above reflects Hex5 Digital's typical remediation rates —
-              the same team that can fix it. Most projects are resolved in 30–60 days,
-              start to finish.
+      {/* ── Bottom CTA (only shown when unlocked or high score) ── */}
+      {(unlocked || isHighScore) && (
+        <div style={{ background:H5.primary, padding:'28px 24px',
+          borderLeft:`4px solid ${H5.secondary}` }}>
+          <div className="bottom-cta-top" style={{ display:'flex', alignItems:'flex-start',
+            justifyContent:'space-between', flexWrap:'wrap', gap:16, marginBottom:20 }}>
+            <div>
+              <h2 style={{ color:'#fff', fontSize:16, fontWeight:700, marginBottom:6 }}>
+                Ready to fix this?
+              </h2>
+              <div style={{ color:'#A8C4DC', fontSize:13.5, lineHeight:1.6, maxWidth:480 }}>
+                The estimate above reflects Hex5 Digital's typical remediation rates —
+                the same team that can fix it. Most projects are resolved in 30–60 days.
+              </div>
+            </div>
+            <div style={{ display:'flex', gap:10, flexWrap:'wrap' }}>
+              <a href="mailto:accessibility@hex5digital.com"
+                style={{ padding:'12px 22px', border:'none', background:H5.secondary,
+                  color:'#fff', fontSize:14, fontWeight:700, textDecoration:'none',
+                  display:'inline-flex', alignItems:'center' }}>
+                Talk to us
+              </a>
+              <button onClick={onEmailReport}
+                style={{ padding:'12px 18px', border:'1px solid rgba(255,255,255,0.4)',
+                  color:'#fff', fontSize:13.5, fontWeight:600, cursor:'pointer',
+                  background:'transparent' }}>
+                Email me this
+              </button>
             </div>
           </div>
-          <div style={{ display:'flex', gap:10, flexWrap:'wrap' }}>
-            <button onClick={onGetReport}
-              style={{ padding:'12px 22px', border:'none', background:H5.secondary,
-                color:'#fff', fontSize:14, fontWeight:700, cursor:'pointer' }}>
-              Download full report
-            </button>
-            <a href="mailto:accessibility@hex5digital.com"
-              style={{ padding:'12px 22px', border:'1px solid rgba(255,255,255,0.4)',
-                color:'#fff', fontSize:14, fontWeight:600, textDecoration:'none',
-                display:'inline-flex', alignItems:'center' }}>
-              Talk to us
-            </a>
+          <div className="steps-grid" style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(160px,1fr))',
+            gap:16, borderTop:'1px solid rgba(255,255,255,0.15)', paddingTop:18 }}>
+            {[
+              { step:'1', title:'Full-site audit',  desc:'We scan every page and template, plus a manual review for anything automated tools miss.' },
+              { step:'2', title:'Scoped quote',      desc:"A fixed-price remediation plan based on your actual codebase — no surprises." },
+              { step:'3', title:'Fix & verify',      desc:'Code, design system, and document fixes, with re-testing to confirm conformance.' },
+            ].map(s => (
+              <div key={s.step}>
+                <div aria-hidden="true" style={{ color:'#7FB8E0', fontSize:11, fontWeight:700,
+                  letterSpacing:'0.5px', marginBottom:4 }}>STEP {s.step}</div>
+                <div style={{ color:'#fff', fontSize:13.5, fontWeight:700, marginBottom:4 }}>{s.title}</div>
+                <div style={{ color:'#A8C4DC', fontSize:12, lineHeight:1.6 }}>{s.desc}</div>
+              </div>
+            ))}
           </div>
         </div>
-
-        {/* What happens next */}
-        <div className="steps-grid" style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(160px,1fr))',
-          gap:16, borderTop:'1px solid rgba(255,255,255,0.15)', paddingTop:18 }}>
-          {[
-            { step:'1', title:'Full-site audit',  desc:'We scan every page and template, plus a manual review for what automated tools miss.' },
-            { step:'2', title:'Scoped quote',      desc:'A fixed-price remediation plan based on your actual codebase — no surprises.' },
-            { step:'3', title:'Fix & verify',      desc:'Code, design system, and document fixes, with re-testing to confirm conformance.' },
-          ].map(s => (
-            <div key={s.step}>
-              <div aria-hidden="true" style={{ color:'#7FB8E0', fontSize:11, fontWeight:700, letterSpacing:'0.5px',
-                marginBottom:4 }}>STEP {s.step}</div>
-              <div style={{ color:'#fff', fontSize:13.5, fontWeight:700, marginBottom:4 }}>{s.title}</div>
-              <div style={{ color:'#A8C4DC', fontSize:12, lineHeight:1.6 }}>{s.desc}</div>
-            </div>
-          ))}
-        </div>
-      </div>
+      )}
 
       {/* ── Scan another page ── */}
       <div style={{ background:'#fff', border:`1px solid ${H5.border}`, borderTop:'none',
@@ -709,10 +812,11 @@ function Results({ target, data, onGetReport, onScanUrl, onEmailReport }) {
         <p style={{ fontSize:12.5, color:H5.muted, lineHeight:1.6, marginBottom:14 }}>
           Issues often vary by page. Enter a URL to scan another page on this site.
         </p>
-
-        <div style={{ display:'flex', gap:8, flexWrap:'wrap', marginBottom: navLinks?.length ? 14 : 0 }}>
+        <div style={{ display:'flex', gap:8, flexWrap:'wrap',
+          marginBottom: navLinks?.length ? 14 : 0 }}>
           <label htmlFor="rescan-url" className="sr-only">URL of another page to scan</label>
-          <input id="rescan-url" type="url" value={nextUrl} onChange={e => setNextUrl(e.target.value)}
+          <input id="rescan-url" type="url" value={nextUrl}
+            onChange={e => setNextUrl(e.target.value)}
             onKeyDown={e => { if (e.key === 'Enter' && nextUrl.trim()) onScanUrl(nextUrl) }}
             placeholder="https://yourwebsite.com/another-page"
             style={{ flex:'1 1 240px', padding:'10px 14px', fontSize:13.5,
@@ -723,13 +827,13 @@ function Results({ target, data, onGetReport, onScanUrl, onEmailReport }) {
             Scan this page
           </button>
         </div>
-
         {navLinks && navLinks.length > 0 && (
           <div>
             <div style={{ fontSize:11.5, color:H5.muted, marginBottom:8 }}>
               Or pick a page from this site's navigation:
             </div>
-            <div className="nav-link-row" style={{ display:'flex', flexWrap: showAllLinks ? 'wrap' : 'nowrap',
+            <div className="nav-link-row" style={{ display:'flex',
+              flexWrap: showAllLinks ? 'wrap' : 'nowrap',
               overflowX: showAllLinks ? 'visible' : 'auto', gap:6, paddingBottom:4 }}>
               {(showAllLinks ? navLinks : navLinks.slice(0, 6)).map(link => (
                 <button key={link.url} onClick={() => onScanUrl(link.url)}
@@ -768,6 +872,7 @@ export default function App() {
   const [error, setError]     = useState(null)
   const [showModal, setShowModal] = useState(false)
   const [showEmailModal, setShowEmailModal] = useState(false)
+  const [unlocked, setUnlocked] = useState(false)
   const mainRef = useRef()
   const inputRef = useRef()
 
@@ -800,6 +905,7 @@ export default function App() {
     setScanData(null)
     setError(null)
     setLoading(true)
+    setUnlocked(false)
 
     // Rotate through status messages while the real scan runs in the background
     const msgs = [
@@ -1098,6 +1204,8 @@ export default function App() {
               <Results
                 target={scanData.url}
                 data={scanData}
+                unlocked={unlocked}
+                onUnlock={() => setUnlocked(true)}
                 onGetReport={() => setShowModal(true)}
                 onScanUrl={runScan}
                 onEmailReport={() => setShowEmailModal(true)}
@@ -1117,7 +1225,7 @@ export default function App() {
             totalDollarMin: scanData.totalDollarMin,
             totalDollarMax: scanData.totalDollarMax,
           }}
-          onSubmit={() => {}}
+          onSubmit={() => { setUnlocked(true) }}
           onClose={() => setShowModal(false)}
         />
       )}
