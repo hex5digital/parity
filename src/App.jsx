@@ -269,8 +269,10 @@ function IssueCard({ issue }) {
 }
 
 // ── Results ────────────────────────────────────────────────────────
-function Results({ target, data, onGetReport }) {
-  const { issues, score, totalDollarMin, totalDollarMax } = data
+function Results({ target, data, onGetReport, onScanUrl }) {
+  const { issues, score, totalDollarMin, totalDollarMax, navLinks } = data
+  const [nextUrl, setNextUrl] = useState('')
+  const [showAllLinks, setShowAllLinks] = useState(false)
   const highRisk = issues.filter(i=>i.risk==='high')
   const medRisk  = issues.filter(i=>i.risk==='medium')
   const lowRisk  = issues.filter(i=>i.risk==='low')
@@ -437,6 +439,61 @@ function Results({ target, data, onGetReport }) {
           ))}
         </div>
       </div>
+
+      {/* ── Scan another page ── */}
+      <div style={{ background:'#fff', border:`1px solid ${H5.border}`, borderTop:'none',
+        padding:'20px 24px' }}>
+        <div style={{ fontSize:13, fontWeight:700, color:H5.primary, marginBottom:4,
+          textTransform:'uppercase', letterSpacing:'0.5px' }}>
+          Check another page on this site
+        </div>
+        <p style={{ fontSize:12.5, color:H5.muted, lineHeight:1.6, marginBottom:14 }}>
+          Issues often vary by page. Enter a URL to scan another page on this site.
+        </p>
+
+        <div style={{ display:'flex', gap:8, flexWrap:'wrap', marginBottom: navLinks?.length ? 14 : 0 }}>
+          <input type="url" value={nextUrl} onChange={e => setNextUrl(e.target.value)}
+            onKeyDown={e => { if (e.key === 'Enter' && nextUrl.trim()) onScanUrl(nextUrl) }}
+            placeholder="https://yourwebsite.com/another-page"
+            aria-label="URL of another page to scan"
+            style={{ flex:'1 1 240px', padding:'10px 14px', fontSize:13.5,
+              border:`1px solid ${H5.border}`, minHeight:'auto' }} />
+          <button onClick={() => nextUrl.trim() && onScanUrl(nextUrl)}
+            style={{ padding:'10px 20px', border:'none', background:H5.primary,
+              color:'#fff', fontSize:13.5, fontWeight:700, cursor:'pointer' }}>
+            Scan this page
+          </button>
+        </div>
+
+        {navLinks && navLinks.length > 0 && (
+          <div>
+            <div style={{ fontSize:11.5, color:H5.muted, marginBottom:8 }}>
+              Or pick a page from this site's navigation:
+            </div>
+            <div style={{ display:'flex', flexWrap: showAllLinks ? 'wrap' : 'nowrap',
+              overflowX: showAllLinks ? 'visible' : 'auto', gap:6, paddingBottom:4 }}>
+              {(showAllLinks ? navLinks : navLinks.slice(0, 6)).map(link => (
+                <button key={link.url} onClick={() => onScanUrl(link.url)}
+                  title={link.url}
+                  style={{ fontSize:12, color:H5.secondary, background:H5.light,
+                    border:`1px solid ${H5.border}`, padding:'6px 12px', cursor:'pointer',
+                    fontWeight:600, maxWidth:160, overflow:'hidden', textOverflow:'ellipsis',
+                    whiteSpace:'nowrap', flexShrink:0 }}>
+                  {link.label}
+                </button>
+              ))}
+              {!showAllLinks && navLinks.length > 6 && (
+                <button onClick={() => setShowAllLinks(true)}
+                  style={{ fontSize:12, color:H5.muted, background:'#fff',
+                    border:`1px dashed ${H5.border}`, padding:'6px 12px', cursor:'pointer',
+                    fontWeight:600, whiteSpace:'nowrap', flexShrink:0 }}>
+                  +{navLinks.length - 6} more
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   )
 }
@@ -453,8 +510,10 @@ export default function App() {
   const mainRef = useRef()
   const inputRef = useRef()
 
-  const runScan = async () => {
-    if (!url.trim()) { inputRef.current?.focus(); return }
+  const runScan = async (overrideUrl) => {
+    const targetUrl = (overrideUrl ?? url).trim()
+    if (!targetUrl) { inputRef.current?.focus(); return }
+    if (overrideUrl) setUrl(overrideUrl)
     setScanned(false)
     setScanData(null)
     setError(null)
@@ -479,7 +538,7 @@ export default function App() {
       const res = await fetch('/api/scan', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url }),
+        body: JSON.stringify({ url: targetUrl }),
       })
       const data = await res.json()
 
@@ -575,6 +634,19 @@ export default function App() {
             <p id="url-hint" style={{ fontSize:12, color:H5.muted, marginTop:8 }}>
               Enter any publicly accessible URL — your homepage, a product page, or a landing page.
             </p>
+
+            {/* ── Error — appears directly under the URL field ── */}
+            {error && (
+              <div role="alert" style={{ background:H5.risk.high.bg, border:`1px solid ${H5.risk.high.fg}33`,
+                padding:'14px 16px', marginTop:12, maxWidth:600 }}>
+                <p style={{ fontSize:13.5, color:H5.risk.high.fg, fontWeight:600, marginBottom:4 }}>
+                  We couldn't complete that scan
+                </p>
+                <p style={{ fontSize:13, color:'#374151', lineHeight:1.6, margin:0 }}>
+                  {error}
+                </p>
+              </div>
+            )}
 
             {/* Trust signals */}
             <div style={{ display:'flex', gap:32, marginTop:36, flexWrap:'wrap' }}>
@@ -672,24 +744,6 @@ export default function App() {
           </div>
         )}
 
-        {/* ── Error ── */}
-        {error && !loading && (
-          <div role="alert" style={{ background:H5.risk.high.bg, border:`1px solid ${H5.risk.high.fg}33`,
-            padding:'24px', marginBottom:24 }}>
-            <p style={{ fontSize:14.5, color:H5.risk.high.fg, fontWeight:600, marginBottom:8 }}>
-              We couldn't complete that scan
-            </p>
-            <p style={{ fontSize:13.5, color:'#374151', lineHeight:1.7, marginBottom:16 }}>
-              {error}
-            </p>
-            <button onClick={runScan}
-              style={{ padding:'10px 20px', border:'none', background:H5.secondary,
-                color:'#fff', fontSize:13.5, fontWeight:700, cursor:'pointer' }}>
-              Try again
-            </button>
-          </div>
-        )}
-
         {/* ── Results ── */}
         <main id="main-content" tabIndex={-1} ref={mainRef} style={{ outline:'none' }}>
           {scanned && !loading && scanData && (
@@ -711,6 +765,7 @@ export default function App() {
                 target={scanData.url}
                 data={scanData}
                 onGetReport={() => setShowModal(true)}
+                onScanUrl={runScan}
               />
             </>
           )}

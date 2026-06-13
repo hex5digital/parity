@@ -221,12 +221,12 @@ export default async function handler(req, res) {
   }
 
   let { url } = req.body || {}
-  if (!url) return res.status(400).json({ error: 'Missing url' })
+  if (!url) return res.status(400).json({ error: 'Missing url', message: 'Please enter a URL to scan.' })
 
   // Normalize URL
   if (!/^https?:\/\//i.test(url)) url = `https://${url}`
   try { new URL(url) } catch {
-    return res.status(400).json({ error: 'Invalid URL' })
+    return res.status(400).json({ error: 'Invalid URL', message: "That doesn't look like a valid URL. Please check it and try again." })
   }
 
   const browserlessToken = process.env.BROWSERLESS_TOKEN
