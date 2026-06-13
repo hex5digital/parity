@@ -167,11 +167,12 @@ const DEFAULT_TEMPLATE = (rule) => ({
 
 const HOURLY_RATE = 175
 
-function buildIssue(rule, nodeCount) {
+function buildIssue(rule, nodeCount, scope) {
   const template = RULE_MAP[rule.id] || DEFAULT_TEMPLATE(rule)
   const [hrLo, hrHi] = template.hoursPerInstance
   const totalHrLo = Math.max(0.75, +(hrLo * nodeCount).toFixed(1))
   const totalHrHi = Math.max(1.5,  +(hrHi * nodeCount).toFixed(1))
+  const sitewideCount = scope?.sitewideCount || 0
   return {
     id: template.id,
     risk: template.risk,
@@ -183,6 +184,11 @@ function buildIssue(rule, nodeCount) {
     dollarMin: Math.round(totalHrLo * HOURLY_RATE),
     dollarMax: Math.round(totalHrHi * HOURLY_RATE),
     devDetail: template.devDetailTemplate,
+    // True if at least one instance was found in shared site chrome
+    // (header/nav/footer) or an external stylesheet — likely recurs
+    // across every page using this template.
+    likelySitewide: sitewideCount > 0,
+    sitewideCount,
   }
 }
 
@@ -243,11 +249,47 @@ export default async function handler(req, res) {
       .analyze()
     console.log(`[scan] axe analysis done at ${Date.now() - t0}ms`)
 
+    // For each violation, estimate whether it lives in shared site chrome
+    // (header/nav/footer) or comes from an external (non-inline) stylesheet
+    // — both are signals that the same issue likely recurs across every page
+    // using this template, not just the page scanned.
+    const scopeByRuleId = await page.evaluate((violations) => {
+      const LANDMARK_SELECTOR = 'header, nav, footer, [role="banner"], [role="navigation"], [role="contentinfo"]'
+      const result = {}
+      for (const v of violations) {
+        let sitewideCount = 0
+        let pageCount = 0
+        for (const node of v.nodes) {
+          let isSitewide = false
+          for (const sel of node.target) {
+            try {
+              const el = document.querySelector(sel)
+              if (!el) continue
+              if (el.closest(LANDMARK_SELECTOR)) { isSitewide = true; break }
+              // color-contrast etc: check if the matched style comes from an
+              // external stylesheet rather than an inline style attribute
+              if (el.style.length === 0) {
+                for (const sheet of document.styleSheets) {
+                  try {
+                    if (sheet.href && sheet.cssRules) { isSitewide = true; break }
+                  } catch { /* cross-origin stylesheet, can't inspect — skip */ }
+                }
+                if (isSitewide) break
+              }
+            } catch { /* invalid selector, skip */ }
+          }
+          if (isSitewide) sitewideCount++; else pageCount++
+        }
+        result[v.id] = { sitewideCount, pageCount }
+      }
+      return result
+    }, axeResults.violations.map(v => ({ id: v.id, nodes: v.nodes.map(n => ({ target: n.target })) })))
+
     await browser.close()
     console.log(`[scan] browser closed at ${Date.now() - t0}ms`)
 
     const issues = axeResults.violations
-      .map(v => buildIssue(v, v.nodes.length))
+      .map(v => buildIssue(v, v.nodes.length, scopeByRuleId[v.id]))
       // Merge duplicates if multiple axe rules map to the same plain-language issue
       .reduce((acc, issue) => {
         const existing = acc.find(a => a.id === issue.id)
@@ -255,6 +297,8 @@ export default async function handler(req, res) {
           existing.count += issue.count
           existing.dollarMin += issue.dollarMin
           existing.dollarMax += issue.dollarMax
+          existing.sitewideCount += issue.sitewideCount
+          existing.likelySitewide = existing.likelySitewide || issue.likelySitewide
           const [eLo] = existing.effort.split('–')
           const [, iHi] = issue.effort.split('–')
           existing.effort = `${parseFloat(eLo)}–${parseFloat(existing.effort.split('–')[1]) + parseFloat(iHi)} hours`

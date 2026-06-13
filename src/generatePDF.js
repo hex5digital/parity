@@ -262,6 +262,17 @@ export async function generateAuditPDF({ issues, target, score, lead, totalDolla
 
     y += 13
 
+    // "Likely site-wide" badge, if applicable
+    if (issue.likelySitewide) {
+      setFill(doc, PURPLE)
+      doc.rect(L, y - 6, 32, 5, 'F')
+      setFont(doc, WHITE)
+      doc.setFontSize(6)
+      doc.setFont('helvetica','bold')
+      doc.text('LIKELY SITE-WIDE', L + 16, y - 3, { align:'center' })
+      y += 2
+    }
+
     // Who this affects
     setFont(doc, NAVY)
     doc.setFontSize(8)
@@ -274,6 +285,23 @@ export async function generateAuditPDF({ issues, target, score, lead, totalDolla
     const whoLines = doc.splitTextToSize(issue.who, CW)
     doc.text(whoLines, L, y)
     y += whoLines.length * 4.2 + 4
+
+    if (issue.likelySitewide) {
+      if (y > H - 30) { doc.addPage(); y = 20 }
+      setFill(doc, [243, 232, 255])
+      setDraw(doc, PURPLE)
+      const swLines = doc.splitTextToSize(
+        "This was found in your site's shared header, navigation, footer, or global stylesheet -- it likely affects every page that uses this template, not just the one scanned.",
+        CW - 8
+      )
+      const boxH = swLines.length * 4 + 4
+      doc.rect(L, y - 3, CW, boxH, 'FD')
+      setFont(doc, PURPLE)
+      doc.setFontSize(8)
+      doc.setFont('helvetica','normal')
+      doc.text(swLines, L + 4, y + 1)
+      y += boxH + 3
+    }
 
     // What needs to happen
     if (y > H - 40) { doc.addPage(); y = 20 }
@@ -408,8 +436,9 @@ export async function generateAuditPDF({ issues, target, score, lead, totalDolla
   const methodSections = [
     ['Automated scan', 'This report is based on an automated scan of the page above using axe-core, the accessibility testing engine used by Google, Microsoft, and the U.S. government. The scan checks the page against WCAG 2.1 and 2.2 success criteria at levels A and AA.'],
     ['Risk levels', 'Each finding is assigned a risk level (high, medium, or low) based on its likely impact on users with disabilities and its frequency in real-world ADA Title III litigation. High-risk findings — missing alt text, low contrast, inaccessible forms — are the issues most commonly cited in legal complaints.'],
-    ['Cost estimates', 'Cost ranges are calculated using a blended developer rate of $175/hour and typical remediation time per instance, based on Hex5 Digital project experience. These figures reflect only the issues detected on the single page scanned. Most sites share templates and components across many pages, and a full manual review frequently surfaces additional issues automated tools cannot detect — actual project scope and cost are often higher than the estimate shown here. Actual costs vary by codebase complexity, design system maturity, and team availability.'],
-    ['What this scan does not cover', 'Automated tools detect roughly 30-40% of real-world accessibility barriers. This scan does not evaluate PDF documents, video captioning, screen reader usability testing, or cognitive accessibility — these require manual expert review.'],
+    ['Cost estimates', "Cost ranges are calculated using a blended developer rate of $175/hour and typical remediation time per instance, based on Hex5 Digital's project experience -- the same rates Hex5 would quote for this work. These figures reflect only the issues detected on the single page scanned. Most sites share templates and components across many pages, and a full manual review frequently surfaces additional issues automated tools cannot detect -- actual project scope and cost are often higher than the estimate shown here. A full-site audit gives a fixed-price quote based on your actual codebase."],
+    ['What this scan does not cover', 'Automated tools detect roughly 30-40% of real-world accessibility barriers. This scan does not evaluate PDF documents, video captioning, screen reader usability testing, or cognitive accessibility -- these require manual expert review.'],
+    ['Important disclaimer', 'This report is an automated screening tool, not a legal opinion or a substitute for a full accessibility audit. It is intended to give you a general sense of your exposure and is not a complete inventory of every issue on your site -- think of it as the tip of the iceberg. A conversation with Hex5 Digital\'s accessibility team, including a full manual review, is the only way to identify everything that may affect your legal risk and your customers.'],
     ['Next steps', 'For a complete WCAG 2.2 AA conformance review including manual testing, document and presentation audits, and a formal VPAT for procurement, contact Hex5 Digital.'],
   ]
 
@@ -430,7 +459,7 @@ export async function generateAuditPDF({ issues, target, score, lead, totalDolla
 
   // ── CLOSING CTA PAGE ──────────────────────────────────────────────
   doc.addPage()
-  const midY = H / 2 - 20
+  const midY = 30
 
   setFill(doc, NAVY)
   doc.rect(L, midY - 6, CW, 48, 'F')
@@ -446,7 +475,7 @@ export async function generateAuditPDF({ issues, target, score, lead, totalDolla
   doc.setFont('helvetica','normal')
   setFont(doc, [168,196,220])
   const ctaLines = doc.splitTextToSize(
-    'Hex5 Digital remediates accessibility issues end-to-end - code, design system, and documents. Our team holds DHS Trusted Tester certification for Section 508 conformance testing. Most projects are resolved in 30-60 days.',
+    'Hex5 Digital remediates accessibility issues end-to-end - code, design system, and documents. Our team holds DHS Trusted Tester certification for Section 508 conformance testing. The estimate in this report reflects the same rates we would quote for this work.',
     CW - 20
   )
   doc.text(ctaLines, L + 10, midY + 18)
@@ -455,6 +484,45 @@ export async function generateAuditPDF({ issues, target, score, lead, totalDolla
   doc.setFontSize(9)
   doc.setFont('helvetica','bold')
   doc.text('hex5digital.com  ·  accessibility@hex5digital.com', L + 10, midY + 38)
+
+  // ── WHAT HAPPENS NEXT ─────────────────────────────────────────────
+  let stepY = midY + 60
+  doc.setFontSize(11)
+  doc.setFont('helvetica','bold')
+  setFont(doc, NAVY)
+  doc.text('What happens next', L, stepY)
+  stepY += 10
+
+  const steps = [
+    ['1', 'Full-site audit', 'We scan every page and template, plus a manual review for issues automated tools miss.'],
+    ['2', 'Scoped quote', 'A fixed-price remediation plan based on your actual codebase -- no surprises.'],
+    ['3', 'Fix & verify', 'Code, design system, and document fixes, with re-testing to confirm conformance.'],
+  ]
+
+  const colW = CW / 3
+  for (let i = 0; i < steps.length; i++) {
+    const [num, title, desc] = steps[i]
+    const x = L + i * colW
+
+    setFill(doc, BLUE)
+    doc.rect(x, stepY, 1.2, 22, 'F')
+
+    setFont(doc, BLUE)
+    doc.setFontSize(8)
+    doc.setFont('helvetica','bold')
+    doc.text(`STEP ${num}`, x + 5, stepY + 4)
+
+    setFont(doc, NAVY)
+    doc.setFontSize(10)
+    doc.setFont('helvetica','bold')
+    doc.text(title, x + 5, stepY + 10)
+
+    setFont(doc, MUTED)
+    doc.setFontSize(8)
+    doc.setFont('helvetica','normal')
+    const descLines = doc.splitTextToSize(desc, colW - 10)
+    doc.text(descLines, x + 5, stepY + 15)
+  }
 
   // ── ADD RUNNING CHROME TO ALL PAGES ──────────────────────────────
   const totalPages = doc.internal.getNumberOfPages()

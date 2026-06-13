@@ -189,6 +189,13 @@ function IssueCard({ issue }) {
         <div style={{ flex:1, minWidth:0 }}>
           <div style={{ fontSize:14.5, fontWeight:600, color:H5.primary, lineHeight:1.4 }}>
             {issue.plain}
+            {issue.likelySitewide && (
+              <span style={{ marginLeft:8, fontSize:10, fontWeight:700, color:H5.tertiary,
+                background:'#F3E8FF', padding:'2px 8px', textTransform:'uppercase',
+                letterSpacing:'0.5px', verticalAlign:'middle' }}>
+                Likely site-wide
+              </span>
+            )}
           </div>
           {!open && (
             <div style={{ fontSize:12.5, color:H5.muted, marginTop:3 }}>
@@ -210,6 +217,14 @@ function IssueCard({ issue }) {
           <div style={{ fontSize:11, fontWeight:700, color:H5.muted, textTransform:'uppercase',
             letterSpacing:'0.6px', marginBottom:6 }}>Who this affects</div>
           <p style={{ fontSize:13.5, color:'#1F2937', lineHeight:1.75 }}>{issue.who}</p>
+          {issue.likelySitewide && (
+            <p style={{ fontSize:12.5, color:H5.tertiary, lineHeight:1.7, marginTop:8,
+              padding:'8px 12px', background:'#F3E8FF', borderLeft:`3px solid ${H5.tertiary}` }}>
+              This was found in your site's shared header, navigation, footer, or
+              global stylesheet — it likely affects every page that uses this
+              template, not just the one scanned.
+            </p>
+          )}
         </div>
 
         {/* What needs to happen */}
@@ -287,12 +302,24 @@ function Results({ target, data, onGetReport }) {
       </div>
 
       {/* ── Scope caveat ── */}
-      <p style={{ fontSize:11.5, color:H5.muted, lineHeight:1.6, margin:'8px 0 16px',
+      <p style={{ fontSize:11.5, color:H5.muted, lineHeight:1.6, margin:'8px 0 8px',
         padding:'0 2px' }}>
-        Estimate reflects only the issues detected on this single page. Most sites share
-        templates across many pages, and a full manual review often surfaces additional
-        issues automated scans cannot detect — total project scope is often higher than
-        shown here.
+        Estimate reflects only the issues detected on this single page. Where possible,
+        we've flagged issues found in your site's shared header, navigation, footer, or
+        global stylesheet as <strong>likely site-wide</strong> — but a full manual
+        review often surfaces additional issues automated scans cannot detect, and
+        total project scope is often higher than shown here.
+      </p>
+
+      {/* ── Legal + "tip of the iceberg" disclaimer ── */}
+      <p style={{ fontSize:11.5, color:H5.muted, lineHeight:1.6, margin:'0 0 16px',
+        padding:'0 2px' }}>
+        This scan is an automated screening tool, not a legal opinion or a substitute
+        for a full accessibility audit. It is intended to give you a general sense of
+        your exposure and is not a complete inventory of every issue on your site —
+        think of it as the tip of the iceberg. A conversation with our accessibility
+        team, including a full manual review, is the only way to identify everything
+        that may affect your legal risk and your customers.
       </p>
 
       {/* ── Context bar ── */}
@@ -365,29 +392,49 @@ function Results({ target, data, onGetReport }) {
 
       {/* ── Bottom CTA ── */}
       <div style={{ background:H5.primary, padding:'28px 24px',
-        display:'flex', alignItems:'center', justifyContent:'space-between',
-        flexWrap:'wrap', gap:16, borderLeft:`4px solid ${H5.secondary}` }}>
-        <div>
-          <div style={{ color:'#fff', fontSize:16, fontWeight:700, marginBottom:6 }}>
-            Ready to fix this?
+        borderLeft:`4px solid ${H5.secondary}` }}>
+        <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between',
+          flexWrap:'wrap', gap:16, marginBottom:20 }}>
+          <div>
+            <div style={{ color:'#fff', fontSize:16, fontWeight:700, marginBottom:6 }}>
+              Ready to fix this?
+            </div>
+            <div style={{ color:'#A8C4DC', fontSize:13.5, lineHeight:1.6, maxWidth:480 }}>
+              The estimate above reflects Hex5 Digital's typical remediation rates —
+              the same team that can fix it. Most projects are resolved in 30–60 days,
+              start to finish.
+            </div>
           </div>
-          <div style={{ color:'#A8C4DC', fontSize:13.5, lineHeight:1.6 }}>
-            Hex5 Digital remediates accessibility issues end-to-end — code, design system, and documents.
-            Most projects are resolved in 30–60 days.
+          <div style={{ display:'flex', gap:10, flexWrap:'wrap' }}>
+            <button onClick={onGetReport}
+              style={{ padding:'12px 22px', border:'none', background:H5.secondary,
+                color:'#fff', fontSize:14, fontWeight:700, cursor:'pointer' }}>
+              Download full report
+            </button>
+            <a href="mailto:accessibility@hex5digital.com"
+              style={{ padding:'12px 22px', border:'1px solid rgba(255,255,255,0.4)',
+                color:'#fff', fontSize:14, fontWeight:600, textDecoration:'none',
+                display:'inline-flex', alignItems:'center' }}>
+              Talk to us
+            </a>
           </div>
         </div>
-        <div style={{ display:'flex', gap:10, flexWrap:'wrap' }}>
-          <button onClick={onGetReport}
-            style={{ padding:'12px 22px', border:'none', background:H5.secondary,
-              color:'#fff', fontSize:14, fontWeight:700, cursor:'pointer' }}>
-            Download full report
-          </button>
-          <a href="mailto:accessibility@hex5digital.com"
-            style={{ padding:'12px 22px', border:'1px solid rgba(255,255,255,0.4)',
-              color:'#fff', fontSize:14, fontWeight:600, textDecoration:'none',
-              display:'inline-flex', alignItems:'center' }}>
-            Talk to us
-          </a>
+
+        {/* What happens next */}
+        <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(160px,1fr))',
+          gap:16, borderTop:'1px solid rgba(255,255,255,0.15)', paddingTop:18 }}>
+          {[
+            { step:'1', title:'Full-site audit',  desc:'We scan every page and template, plus a manual review for what automated tools miss.' },
+            { step:'2', title:'Scoped quote',      desc:'A fixed-price remediation plan based on your actual codebase — no surprises.' },
+            { step:'3', title:'Fix & verify',      desc:'Code, design system, and document fixes, with re-testing to confirm conformance.' },
+          ].map(s => (
+            <div key={s.step}>
+              <div style={{ color:'#7FB8E0', fontSize:11, fontWeight:700, letterSpacing:'0.5px',
+                marginBottom:4 }}>STEP {s.step}</div>
+              <div style={{ color:'#fff', fontSize:13.5, fontWeight:700, marginBottom:4 }}>{s.title}</div>
+              <div style={{ color:'#A8C4DC', fontSize:12, lineHeight:1.6 }}>{s.desc}</div>
+            </div>
+          ))}
         </div>
       </div>
     </div>
