@@ -26,11 +26,12 @@ export const config = {
 
 // ── Mapping: axe rule ID → plain-language issue template ───────────
 // Each entry defines how a raw axe-core violation becomes a
-// business-readable finding. dollarPerInstance is a rough blended
-// dev-rate estimate ($175/hr) used to compute the cost range. Ranges
-// reflect this single page only — see the "scope" caveat surfaced in
-// the UI and PDF, since shared templates and manual-review findings
-// typically expand real project scope beyond a single-page scan.
+// business-readable finding. Cost ranges are computed from
+// hoursPerInstance and a base blended rate (see effectiveRate below,
+// which applies a small seeded variance). Ranges reflect this single
+// page only — see the "scope" caveat surfaced in the UI and PDF, since
+// shared templates and manual-review findings typically expand real
+// project scope beyond a single-page scan.
 const RULE_MAP = {
   'image-alt': {
     id:'alt', risk:'high',
@@ -165,14 +166,36 @@ const DEFAULT_TEMPLATE = (rule) => ({
   devDetailTemplate: `${rule.id}. ${rule.helpUrl || ''}`,
 })
 
+// Base blended rate used for cost estimates. A small, deterministic-per-issue
+// variance is applied (see effectiveRate) so the exact rate and per-issue-type
+// hour ranges can't be reverse-engineered by diffing repeated scans.
 const HOURLY_RATE = 175
 
-function buildIssue(rule, nodeCount, scope) {
+// Simple string hash -> [0,1), used to derive a small per-issue rate
+// variance that's stable for a given (url, rule id) pair but not a fixed
+// global constant.
+function seededFraction(str) {
+  let h = 0
+  for (let i = 0; i < str.length; i++) {
+    h = (h * 31 + str.charCodeAt(i)) >>> 0
+  }
+  return (h % 1000) / 1000
+}
+
+// Returns a rate within ~±8% of HOURLY_RATE, seeded by url+ruleId.
+function effectiveRate(url, ruleId) {
+  const frac = seededFraction(`${url}|${ruleId}`)
+  const variance = 0.92 + frac * 0.16 // 0.92 - 1.08
+  return HOURLY_RATE * variance
+}
+
+function buildIssue(rule, nodeCount, scope, url) {
   const template = RULE_MAP[rule.id] || DEFAULT_TEMPLATE(rule)
   const [hrLo, hrHi] = template.hoursPerInstance
   const totalHrLo = Math.max(0.75, +(hrLo * nodeCount).toFixed(1))
   const totalHrHi = Math.max(1.5,  +(hrHi * nodeCount).toFixed(1))
   const sitewideCount = scope?.sitewideCount || 0
+  const rate = effectiveRate(url, rule.id)
   return {
     id: template.id,
     risk: template.risk,
@@ -181,8 +204,8 @@ function buildIssue(rule, nodeCount, scope) {
     fix: template.fix,
     count: nodeCount,
     effort: `${totalHrLo}–${totalHrHi} hours`,
-    dollarMin: Math.round(totalHrLo * HOURLY_RATE),
-    dollarMax: Math.round(totalHrHi * HOURLY_RATE),
+    dollarMin: Math.round(totalHrLo * rate),
+    dollarMax: Math.round(totalHrHi * rate),
     devDetail: template.devDetailTemplate,
     // True if at least one instance was found in shared site chrome
     // (header/nav/footer) or an external stylesheet — likely recurs
@@ -285,11 +308,37 @@ export default async function handler(req, res) {
       return result
     }, axeResults.violations.map(v => ({ id: v.id, nodes: v.nodes.map(n => ({ target: n.target })) })))
 
+    // Extract same-domain links from nav/header/footer so the user can
+    // quickly scan other pages on their site without retyping a URL.
+    const navLinks = await page.evaluate((pageUrl) => {
+      const NAV_SELECTOR = 'header a[href], nav a[href], footer a[href], [role="navigation"] a[href]'
+      const origin = new URL(pageUrl).origin
+      const seen = new Set()
+      const links = []
+      for (const a of document.querySelectorAll(NAV_SELECTOR)) {
+        const href = a.getAttribute('href')
+        if (!href || href.startsWith('#') || href.startsWith('mailto:') || href.startsWith('tel:') || href.startsWith('javascript:')) continue
+        let abs
+        try { abs = new URL(href, pageUrl).href } catch { continue }
+        if (!abs.startsWith(origin)) continue // same-domain only
+        // Strip hash/query for dedup and cleanliness
+        const clean = abs.split('#')[0]
+        if (seen.has(clean)) continue
+        const label = a.textContent.trim().replace(/\s+/g, ' ')
+        if (!label) continue
+        seen.add(clean)
+        links.push({ url: clean, label })
+        if (links.length >= 20) break
+      }
+      return links
+    }, url)
+    console.log(`[scan] extracted ${navLinks.length} nav links`)
+
     await browser.close()
     console.log(`[scan] browser closed at ${Date.now() - t0}ms`)
 
     const issues = axeResults.violations
-      .map(v => buildIssue(v, v.nodes.length, scopeByRuleId[v.id]))
+      .map(v => buildIssue(v, v.nodes.length, scopeByRuleId[v.id], url))
       // Merge duplicates if multiple axe rules map to the same plain-language issue
       .reduce((acc, issue) => {
         const existing = acc.find(a => a.id === issue.id)
@@ -328,6 +377,7 @@ export default async function handler(req, res) {
       totalDollarMax,
       passes: axeResults.passes.length,
       incomplete: axeResults.incomplete.length,
+      navLinks,
     })
   } catch (err) {
     if (browser) await browser.close().catch(() => {})
