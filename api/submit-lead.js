@@ -15,9 +15,12 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: 'Method not allowed' })
   }
 
-  const { name, email, company, role, phone, auditTarget, score } = req.body
+  const { name, email, company, role, phone, auditTarget, score, pdfBase64, pdfFilename, softLead } = req.body
 
-  if (!name || !email || !company) {
+  if (!name || !email) {
+    return res.status(400).json({ error: 'Missing required fields' })
+  }
+  if (!softLead && !company) {
     return res.status(400).json({ error: 'Missing required fields' })
   }
 
@@ -25,10 +28,14 @@ export default async function handler(req, res) {
   const notifyTo  = process.env.NOTIFY_EMAIL || 'accessibility@hex5digital.com'
 
   if (!apiKey) {
-    // In dev without a key, just log and return success
-    console.log('Lead received (no RESEND_API_KEY set):', { name, email, company })
+    console.log('Lead received (no RESEND_API_KEY set):', { name, email, company, role, phone, auditTarget, score, softLead, hasPdf: !!pdfBase64 })
     return res.status(200).json({ ok: true, dev: true })
   }
+
+  // Resend attachments expect base64 content without the data URI prefix
+  const attachments = pdfBase64
+    ? [{ filename: pdfFilename || 'Hex5-Parity-Audit.pdf', content: pdfBase64 }]
+    : []
 
   try {
     // 1. Notify Hex5 Digital of the new lead
@@ -41,11 +48,13 @@ export default async function handler(req, res) {
       body: JSON.stringify({
         from: 'Reach Auditor <reach@hex5digital.com>',
         to: [notifyTo],
-        subject: `New Reach lead — ${name} at ${company}`,
+        subject: softLead
+          ? `Soft lead — ${name} requested report by email (${auditTarget || 'unknown site'})`
+          : `New Reach lead — ${name} at ${company}`,
         html: `
           <div style="font-family:sans-serif;max-width:560px;margin:0 auto">
             <div style="background:#19335A;padding:20px 24px;margin-bottom:24px">
-              <h1 style="color:#fff;font-size:18px;margin:0">New Reach Audit Lead</h1>
+              <h1 style="color:#fff;font-size:18px;margin:0">${softLead ? 'Soft Lead — Email Report Request' : 'New Reach Audit Lead'}</h1>
               <p style="color:#A8C4DC;font-size:12px;margin:4px 0 0">
                 Submitted ${new Date().toLocaleString('en-US', { timeZone:'America/New_York' })} ET
               </p>
@@ -54,9 +63,11 @@ export default async function handler(req, res) {
               ${[
                 ['Name',         name],
                 ['Email',        email],
-                ['Company',      company],
-                ['Job title',    role || '—'],
-                ['Phone',        phone || '—'],
+                ...(!softLead ? [
+                  ['Company',    company],
+                  ['Job title',  role || '—'],
+                  ['Phone',      phone || '—'],
+                ] : []),
                 ['Audit target', auditTarget || '—'],
                 ['Score',        score != null ? `${score}/100` : '—'],
               ].map(([label, value]) => `
@@ -70,10 +81,14 @@ export default async function handler(req, res) {
             </table>
             <div style="margin-top:24px;padding:16px 20px;
               background:#E8EFF5;border-left:3px solid #0078BD;font-size:13px;color:#19335A">
-              Follow up within 1 business day.
+              ${softLead
+                ? 'Soft lead — they opted to receive results by email rather than download the full report. Lower intent but worth a light follow-up.'
+                : 'Follow up within 1 business day.'
+              }
             </div>
           </div>
         `,
+        attachments,
       }),
     })
 

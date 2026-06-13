@@ -524,6 +524,35 @@ export async function generateAuditPDF({ issues, target, score, lead, totalDolla
     doc.text(descLines, x + 5, stepY + 15)
   }
 
+  // ── QR CODE ───────────────────────────────────────────────────────
+  const qrY = stepY + 40
+  const scanUrl = 'https://parity.hex5digital.com'
+  try {
+    const qrApiUrl = `https://api.qrserver.com/v1/create-qr-code/?size=80x80&data=${encodeURIComponent(scanUrl)}&format=png&bgcolor=ffffff&color=19335a&margin=2`
+    const qrRes = await fetch(qrApiUrl)
+    const qrBlob = await qrRes.blob()
+    const qrDataUrl = await new Promise((resolve, reject) => {
+      const reader = new FileReader()
+      reader.onload = () => resolve(reader.result)
+      reader.onerror = reject
+      reader.readAsDataURL(qrBlob)
+    })
+    doc.addImage(qrDataUrl, 'PNG', L, qrY, 22, 22)
+  } catch(e) {
+    // QR code fetch failed — skip gracefully, don't break PDF generation
+    console.warn('QR code generation failed:', e)
+  }
+
+  setFont(doc, NAVY)
+  doc.setFontSize(10)
+  doc.setFont('helvetica','bold')
+  doc.text('Scan to check another page', L + 26, qrY + 7)
+  setFont(doc, MUTED)
+  doc.setFontSize(8.5)
+  doc.setFont('helvetica','normal')
+  const qrLines = doc.splitTextToSize(`Run a free scan on any page at ${scanUrl} — share this report with your team, or scan another page to see how your site compares across templates.`, CW - 26)
+  doc.text(qrLines, L + 26, qrY + 13)
+
   // ── ADD RUNNING CHROME TO ALL PAGES ──────────────────────────────
   const totalPages = doc.internal.getNumberOfPages()
   for (let p = 1; p <= totalPages; p++) {

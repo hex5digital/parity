@@ -1,5 +1,34 @@
-import { useState, useRef, useEffect } from "react"
+import { useState, useRef, useEffect, useCallback } from "react"
 import { generateAuditPDF } from './generatePDF.js'
+
+// ── useIsMobile ────────────────────────────────────────────────────
+function useIsMobile() {
+  const [mobile, setMobile] = useState(() => window.innerWidth < 640)
+  useEffect(() => {
+    const h = () => setMobile(window.innerWidth < 640)
+    window.addEventListener('resize', h, { passive: true })
+    return () => window.removeEventListener('resize', h)
+  }, [])
+  return mobile
+}
+
+// ── useFocusTrap — keeps keyboard focus inside a modal ────────────
+function useFocusTrap(ref, active) {
+  useEffect(() => {
+    if (!active || !ref.current) return
+    const FOCUSABLE = 'a[href],button:not([disabled]),input:not([disabled]),select:not([disabled]),textarea:not([disabled]),[tabindex]:not([tabindex="-1"])'
+    const trap = (e) => {
+      if (e.key !== 'Tab') return
+      const els = Array.from(ref.current.querySelectorAll(FOCUSABLE)).filter(el => !el.closest('[hidden]'))
+      if (!els.length) { e.preventDefault(); return }
+      const first = els[0], last = els[els.length - 1]
+      if (e.shiftKey) { if (document.activeElement === first) { e.preventDefault(); last.focus() } }
+      else            { if (document.activeElement === last)  { e.preventDefault(); first.focus() } }
+    }
+    document.addEventListener('keydown', trap)
+    return () => document.removeEventListener('keydown', trap)
+  }, [ref, active])
+}
 
 // ── Brand ─────────────────────────────────────────────────────────
 const H5 = {
@@ -25,13 +54,154 @@ const GLOBAL_CSS = `
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #F8FAFC; }
   :focus-visible { outline: 3px solid #0078BD; outline-offset: 3px; }
-  button, a, input, select { min-height: 44px; }
+  button { cursor: pointer; }
+  button, a, input, select, textarea { min-height: 44px; }
   .skip-link { position:absolute; top:-100px; left:0; background:#19335A; color:#fff;
     padding:12px 20px; font-weight:600; font-size:14px; z-index:9999; text-decoration:none; }
   .skip-link:focus { top:0; }
   .sr-only { position:absolute; width:1px; height:1px; padding:0; margin:-1px;
     overflow:hidden; clip:rect(0,0,0,0); white-space:nowrap; border:0; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* ── Mobile overrides (< 640px) ── */
+  @media (max-width: 639px) {
+    .url-input-row { flex-direction: column !important; }
+    .url-input-row input { border-bottom: 1px solid #B0BAC4 !important; }
+    .url-input-row button { border-left: none !important; border-top: 3px solid #470069 !important; width: 100% !important; }
+    .lead-form-grid { grid-template-columns: 1fr !important; }
+    .big-three-grid { grid-template-columns: 1fr !important; }
+    .big-three-grid > div { border-bottom: 1px solid #B0BAC4; }
+    .steps-grid { grid-template-columns: 1fr !important; }
+    .cant-see-grid { grid-template-columns: 1fr !important; }
+    .creds-grid { grid-template-columns: 1fr !important; }
+    .context-bar { flex-direction: column !important; align-items: flex-start !important; }
+    .context-bar-buttons { flex-direction: column !important; width: 100%; }
+    .context-bar-buttons button, .context-bar-buttons a { width: 100% !important; text-align: center !important; }
+    .header-subtitle { display: none !important; }
+    .hero-h1 { font-size: 22px !important; }
+    .score-val { font-size: 26px !important; }
+    .benchmark-row { flex-direction: column !important; }
+    .nav-link-row { flex-wrap: wrap !important; overflow-x: visible !important; }
+    .bottom-cta-top { flex-direction: column !important; }
+  }
 `
+
+// ── Email Report Modal (soft lead) ─────────────────────────────────
+function EmailReportModal({ onClose, auditData }) {
+  const [email, setEmail] = useState('')
+  const [name, setName]   = useState('')
+  const [sent, setSent]   = useState(false)
+  const [loading, setLoading] = useState(false)
+  const inputRef = useRef()
+  const dialogRef = useRef()
+
+  useFocusTrap(dialogRef, true)
+  useEffect(() => { inputRef.current?.focus() }, [])
+  useEffect(() => {
+    const h = e => { if (e.key === 'Escape') onClose() }
+    document.addEventListener('keydown', h)
+    return () => document.removeEventListener('keydown', h)
+  }, [onClose])
+
+  const valid = name.trim() && email.includes('@')
+
+  const submit = async () => {
+    if (!valid || loading) return
+    setLoading(true)
+    try {
+      await fetch('/api/submit-lead', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name,
+          email,
+          company: '',
+          auditTarget: auditData.url,
+          score: auditData.score,
+          softLead: true,
+        })
+      })
+    } catch(e) { console.error(e) }
+    setLoading(false)
+    setSent(true)
+  }
+
+  return (
+    <div role="dialog" aria-modal="true" aria-labelledby="email-modal-title"
+      onClick={e => { if (e.target === e.currentTarget) onClose() }}
+      style={{ position:'fixed', inset:0, background:'rgba(25,51,90,0.85)',
+        zIndex:1000, display:'flex', alignItems:'center', justifyContent:'center', padding:16 }}>
+      <div ref={dialogRef} style={{ background:'#fff', maxWidth:400, width:'100%', border:`2px solid ${H5.primary}` }}>
+        <div style={{ background:H5.primary, padding:'18px 24px', display:'flex', alignItems:'center' }}>
+          <div>
+            <h2 id="email-modal-title" style={{ color:'#fff', fontWeight:700, fontSize:16, margin:0 }}>
+              Email me this report
+            </h2>
+            <p style={{ color:'#A8C4DC', fontSize:12, margin:'4px 0 0' }}>
+              We'll send a link to your results — no full form required
+            </p>
+          </div>
+          <button onClick={onClose} aria-label="Close"
+            style={{ marginLeft:'auto', background:'none', border:'1px solid #A8C4DC',
+              color:'#fff', fontSize:18, cursor:'pointer', padding:'4px 10px', minHeight:36, minWidth:36 }}>
+            ✕
+          </button>
+        </div>
+
+        {!sent ? (
+          <div style={{ padding:24 }}>
+            <p style={{ fontSize:13, color:H5.muted, lineHeight:1.7, marginBottom:18 }}>
+              Enter your name and email and we'll send you a link to these results.
+              Hex5 Digital may follow up to walk through the findings with you.
+            </p>
+            <div style={{ marginBottom:12 }}>
+              <label htmlFor="er-name" style={{ fontSize:12.5, color:H5.primary, display:'block',
+                marginBottom:5, fontWeight:600 }}>Your name *</label>
+              <input ref={inputRef} id="er-name" type="text" value={name}
+                onChange={e => setName(e.target.value)} placeholder="Jane Smith"
+                style={{ width:'100%', padding:'10px 12px', fontSize:13.5,
+                  border:`1.5px solid ${H5.border}`, color:'#1F2937', background:'#fff', outline:'none' }} />
+            </div>
+            <div style={{ marginBottom:16 }}>
+              <label htmlFor="er-email" style={{ fontSize:12.5, color:H5.primary, display:'block',
+                marginBottom:5, fontWeight:600 }}>Email address *</label>
+              <input id="er-email" type="email" value={email}
+                onChange={e => setEmail(e.target.value)} placeholder="jane@company.com"
+                onKeyDown={e => { if (e.key === 'Enter') submit() }}
+                style={{ width:'100%', padding:'10px 12px', fontSize:13.5,
+                  border:`1.5px solid ${H5.border}`, color:'#1F2937', background:'#fff', outline:'none' }} />
+            </div>
+            <button onClick={submit} disabled={!valid || loading}
+              style={{ width:'100%', padding:13, border:'none',
+                background: valid ? H5.secondary : '#9CA3AF',
+                color:'#fff', fontSize:14, fontWeight:700,
+                cursor: valid ? 'pointer' : 'not-allowed' }}>
+              {loading ? 'Sending…' : 'Send me the report →'}
+            </button>
+            <p style={{ fontSize:11, color:H5.muted, marginTop:10, textAlign:'center' }}>
+              Your information is never sold.
+            </p>
+          </div>
+        ) : (
+          <div style={{ padding:'32px 24px', textAlign:'center' }}>
+            <div style={{ fontSize:40, marginBottom:12 }} role="img" aria-label="Email sent">📬</div>
+            <h3 style={{ fontSize:17, fontWeight:700, color:H5.primary, marginBottom:8 }}>
+              Check your inbox
+            </h3>
+            <p style={{ fontSize:13.5, color:'#374151', lineHeight:1.75, marginBottom:18 }}>
+              We've noted your interest and will follow up at <strong>{email}</strong>.
+            </p>
+            <button onClick={onClose}
+              style={{ padding:'10px 24px', border:`2px solid ${H5.primary}`,
+                background:'#fff', color:H5.primary, fontSize:13.5, fontWeight:700, cursor:'pointer' }}>
+              Close
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
 
 // ── Lead Modal ─────────────────────────────────────────────────────
 function LeadModal({ onClose, onSubmit, auditData }) {
@@ -39,12 +209,14 @@ function LeadModal({ onClose, onSubmit, auditData }) {
   const [loading, setLoading]   = useState(false)
   const [done, setDone]         = useState(false)
   const firstRef = useRef()
+  const dialogRef = useRef()
 
+  useFocusTrap(dialogRef, true)
   useEffect(() => { firstRef.current?.focus() }, [])
   useEffect(() => {
     const h = e => { if (e.key === 'Escape') onClose() }
-    window.addEventListener('keydown', h)
-    return () => window.removeEventListener('keydown', h)
+    document.addEventListener('keydown', h)
+    return () => document.removeEventListener('keydown', h)
   }, [onClose])
 
   const set   = (k,v) => setForm(f => ({...f,[k]:v}))
@@ -90,9 +262,10 @@ function LeadModal({ onClose, onSubmit, auditData }) {
 
   return (
     <div role="dialog" aria-modal="true" aria-labelledby="modal-title"
-      style={{ position:'fixed', inset:0, background:'rgba(25,51,90,0.8)',
+      onClick={e => { if (e.target === e.currentTarget) onClose() }}
+      style={{ position:'fixed', inset:0, background:'rgba(25,51,90,0.85)',
         zIndex:1000, display:'flex', alignItems:'center', justifyContent:'center', padding:16 }}>
-      <div style={{ background:'#fff', maxWidth:480, width:'100%', border:`2px solid ${H5.primary}` }}>
+      <div ref={dialogRef} style={{ background:'#fff', maxWidth:480, width:'100%', border:`2px solid ${H5.primary}` }}>
         <div style={{ background:H5.primary, padding:'20px 24px', display:'flex', alignItems:'center', gap:12 }}>
           <div>
             <h2 id="modal-title" style={{ color:'#fff', fontWeight:700, fontSize:17, margin:0 }}>
@@ -114,7 +287,7 @@ function LeadModal({ onClose, onSubmit, auditData }) {
             <p style={{ fontSize:13.5, color:'#374151', lineHeight:1.75, marginBottom:20 }}>
               We'll generate your branded report immediately. Hex5 Digital may reach out to walk through the findings with you.
             </p>
-            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 }}>
+            <div className="lead-form-grid" style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 }}>
               {fields.map((f,i) => (
                 <div key={f.k} style={{ gridColumn:`span ${f.span}` }}>
                   <label htmlFor={`f-${f.k}`}
@@ -195,8 +368,7 @@ function IssueCard({ issue }) {
                 letterSpacing:'0.5px', verticalAlign:'middle' }}>
                 Likely site-wide
               </span>
-            )}
-          </div>
+            )}          </div>
           {!open && (
             <div style={{ fontSize:12.5, color:H5.muted, marginTop:3 }}>
               {issue.count} {issue.count===1?'instance':'instances'} found
@@ -269,7 +441,7 @@ function IssueCard({ issue }) {
 }
 
 // ── Results ────────────────────────────────────────────────────────
-function Results({ target, data, onGetReport, onScanUrl }) {
+function Results({ target, data, onGetReport, onScanUrl, onEmailReport }) {
   const { issues, score, totalDollarMin, totalDollarMax, navLinks } = data
   const [nextUrl, setNextUrl] = useState('')
   const [showAllLinks, setShowAllLinks] = useState(false)
@@ -284,8 +456,11 @@ function Results({ target, data, onGetReport, onScanUrl }) {
 
   return (
     <div>
+      {/* Visually-hidden h1 for screen reader heading hierarchy on results page */}
+      <h1 className="sr-only">Accessibility audit results for {target}</h1>
+
       {/* ── Big three numbers ── */}
-      <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(180px,1fr))',
+      <div className="big-three-grid" style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(180px,1fr))',
         gap:2, marginBottom:2, border:`1px solid ${H5.border}` }}>
         {[
           { val:score,                      sub:'out of 100',        label:'Accessibility score',
@@ -295,7 +470,7 @@ function Results({ target, data, onGetReport, onScanUrl }) {
             label:'Remediation cost',       color:H5.secondary },
         ].map(c => (
           <div key={c.label} style={{ background:'#fff', padding:'24px 20px', textAlign:'center' }}>
-            <div style={{ fontSize:32, fontWeight:700, color:c.color, lineHeight:1 }}>{c.val}</div>
+            <div className="score-val" style={{ fontSize:32, fontWeight:700, color:c.color, lineHeight:1 }}>{c.val}</div>
             <div style={{ fontSize:12, color:H5.muted, marginTop:4 }}>{c.sub}</div>
             <div style={{ fontSize:11, fontWeight:700, color:H5.primary, marginTop:6,
               textTransform:'uppercase', letterSpacing:'0.5px' }}>{c.label}</div>
@@ -303,7 +478,34 @@ function Results({ target, data, onGetReport, onScanUrl }) {
         ))}
       </div>
 
-      {/* ── Scope caveat ── */}
+      {/* ── Score benchmark ── */}
+      <div className="benchmark-row" style={{ background:'#fff', border:`1px solid ${H5.border}`, borderTop:'none',
+        padding:'12px 20px', marginBottom:2, display:'flex', alignItems:'center', gap:16, flexWrap:'wrap' }}>
+        <div style={{ flex:'1 1 200px', minWidth:0 }}>
+          <div style={{ display:'flex', justifyContent:'space-between', fontSize:11.5,
+            color:H5.muted, marginBottom:5 }}>
+            <span>Your score: <strong style={{ color: score>=80?H5.risk.low.fg:score>=50?H5.risk.medium.fg:H5.risk.high.fg }}>{score}</strong></span>
+            <span>Industry average: <strong>57</strong></span>
+          </div>
+          <div role="img"
+            aria-label={`Score ${score} out of 100. Industry average is 57.`}
+            style={{ position:'relative', height:6, background:H5.light, borderRadius:3 }}>
+            <div aria-hidden="true" style={{ position:'absolute', left:'57%', top:-3, width:2, height:12,
+              background:H5.muted, borderRadius:1 }} />
+            <div aria-hidden="true" style={{ width:`${score}%`, height:'100%', borderRadius:3,
+              background: score>=80?H5.risk.low.fg:score>=50?H5.risk.medium.fg:H5.risk.high.fg,
+              transition:'width 0.6s ease' }} />
+          </div>
+        </div>
+        <p style={{ fontSize:12, color:H5.muted, margin:0, flex:'1 1 200px' }}>
+          {score > 57
+            ? `You're scoring above the industry average of 57 — but you still have issues that could attract legal attention.`
+            : score === 57
+            ? `You're right at the industry average of 57. Most sites at this level still carry meaningful legal exposure.`
+            : `You're scoring below the industry average of 57. Sites at this level are more frequently targeted in ADA Title III litigation.`
+          }
+        </p>
+      </div>
       <p style={{ fontSize:11.5, color:H5.muted, lineHeight:1.6, margin:'8px 0 8px',
         padding:'0 2px' }}>
         Estimate reflects only the issues detected on this single page. Where possible,
@@ -325,7 +527,7 @@ function Results({ target, data, onGetReport, onScanUrl }) {
       </p>
 
       {/* ── Context bar ── */}
-      <div style={{ background:riskColor.bg, border:`1px solid ${riskColor.fg}33`,
+      <div className="context-bar" style={{ background:riskColor.bg, border:`1px solid ${riskColor.fg}33`,
         borderTop:'none', padding:'14px 20px', marginBottom:24,
         display:'flex', alignItems:'center', justifyContent:'space-between', flexWrap:'wrap', gap:12 }}>
         <p style={{ fontSize:13.5, color:riskColor.fg, lineHeight:1.6, margin:0, maxWidth:560 }}>
@@ -338,12 +540,19 @@ function Results({ target, data, onGetReport, onScanUrl }) {
             : 'No high-risk issues found. Address medium-risk items to reach full WCAG 2.2 AA compliance.'
           }
         </p>
-        <button onClick={onGetReport}
-          style={{ padding:'12px 24px', border:'none', background:H5.secondary,
-            color:'#fff', fontSize:14, fontWeight:700, cursor:'pointer', whiteSpace:'nowrap',
-            borderLeft:`3px solid ${H5.tertiary}` }}>
-          Get the full report →
-        </button>
+        <div className="context-bar-buttons" style={{ display:'flex', gap:8, flexWrap:'wrap' }}>
+          <button onClick={onGetReport}
+            style={{ padding:'12px 24px', border:'none', background:H5.secondary,
+              color:'#fff', fontSize:14, fontWeight:700, cursor:'pointer', whiteSpace:'nowrap',
+              borderLeft:`3px solid ${H5.tertiary}` }}>
+            Get the full report →
+          </button>
+          <button onClick={onEmailReport}
+            style={{ padding:'12px 18px', border:`1px solid ${riskColor.fg}`, background:'transparent',
+              color:riskColor.fg, fontSize:13.5, fontWeight:600, cursor:'pointer', whiteSpace:'nowrap' }}>
+            Email me this
+          </button>
+        </div>
       </div>
 
       {/* ── Issues — high risk first ── */}
@@ -392,15 +601,53 @@ function Results({ target, data, onGetReport, onScanUrl }) {
         </div>
       )}
 
+      {/* ── What this scan can't see ── */}
+      <div style={{ background:H5.light, border:`1px solid ${H5.border}`, borderTop:'none',
+        padding:'20px 24px', marginBottom:24 }}>
+        <h2 style={{ fontSize:13, fontWeight:700, color:H5.primary, marginBottom:10,
+          textTransform:'uppercase', letterSpacing:'0.5px' }}>
+          What this scan can't see
+        </h2>
+        <p style={{ fontSize:12.5, color:H5.muted, lineHeight:1.7, marginBottom:14 }}>
+          Automated tools detect roughly 30–40% of real-world accessibility barriers.
+          The issues below require a manual review by our accessibility team — and are
+          just as likely to appear in litigation as the automated findings above.
+        </p>
+        <div className="cant-see-grid" style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(200px,1fr))',
+          gap:10 }}>
+          {[
+            { icon:'🎹', title:'Keyboard navigation', desc:'Can a user tab through your entire site without a mouse? Screen reader and motor-impaired users depend on this.' },
+            { icon:'🔊', title:'Screen reader flow', desc:'Does your content read in the right order? Are dynamic updates announced? Only a real screen reader test reveals this.' },
+            { icon:'📄', title:'PDFs & documents', desc:'Downloadable files have their own WCAG requirements. Most PDFs on the web fail basic accessibility checks.' },
+            { icon:'🎬', title:'Video captions & audio', desc:'Auto-generated captions often contain errors that make them non-compliant. Transcripts and audio descriptions may also be required.' },
+            { icon:'🧠', title:'Cognitive accessibility', desc:'Plain language, consistent navigation, and clear error messages — these affect users with cognitive disabilities and aren\'t detectable by scanners.' },
+          ].map(item => (
+            <div key={item.title} style={{ background:'#fff', padding:'14px 16px',
+              border:`1px solid ${H5.border}` }}>
+              <div aria-hidden="true" style={{ fontSize:20, marginBottom:6 }}>{item.icon}</div>
+              <div style={{ fontSize:13, fontWeight:700, color:H5.primary, marginBottom:4 }}>{item.title}</div>
+              <div style={{ fontSize:12, color:H5.muted, lineHeight:1.6 }}>{item.desc}</div>
+            </div>
+          ))}
+        </div>
+        <p style={{ fontSize:12.5, color:H5.primary, fontWeight:600, marginTop:14, marginBottom:0 }}>
+          A conversation with Hex5 Digital's accessibility team is the only way to get the full picture.{' '}
+          <a href="mailto:accessibility@hex5digital.com"
+            style={{ color:H5.secondary, textDecoration:'underline' }}>
+            Schedule a review →
+          </a>
+        </p>
+      </div>
+
       {/* ── Bottom CTA ── */}
       <div style={{ background:H5.primary, padding:'28px 24px',
         borderLeft:`4px solid ${H5.secondary}` }}>
         <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between',
           flexWrap:'wrap', gap:16, marginBottom:20 }}>
           <div>
-            <div style={{ color:'#fff', fontSize:16, fontWeight:700, marginBottom:6 }}>
+            <h2 style={{ color:'#fff', fontSize:16, fontWeight:700, marginBottom:6 }}>
               Ready to fix this?
-            </div>
+            </h2>
             <div style={{ color:'#A8C4DC', fontSize:13.5, lineHeight:1.6, maxWidth:480 }}>
               The estimate above reflects Hex5 Digital's typical remediation rates —
               the same team that can fix it. Most projects are resolved in 30–60 days,
@@ -423,7 +670,7 @@ function Results({ target, data, onGetReport, onScanUrl }) {
         </div>
 
         {/* What happens next */}
-        <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(160px,1fr))',
+        <div className="steps-grid" style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(160px,1fr))',
           gap:16, borderTop:'1px solid rgba(255,255,255,0.15)', paddingTop:18 }}>
           {[
             { step:'1', title:'Full-site audit',  desc:'We scan every page and template, plus a manual review for what automated tools miss.' },
@@ -431,7 +678,7 @@ function Results({ target, data, onGetReport, onScanUrl }) {
             { step:'3', title:'Fix & verify',      desc:'Code, design system, and document fixes, with re-testing to confirm conformance.' },
           ].map(s => (
             <div key={s.step}>
-              <div style={{ color:'#7FB8E0', fontSize:11, fontWeight:700, letterSpacing:'0.5px',
+              <div aria-hidden="true" style={{ color:'#7FB8E0', fontSize:11, fontWeight:700, letterSpacing:'0.5px',
                 marginBottom:4 }}>STEP {s.step}</div>
               <div style={{ color:'#fff', fontSize:13.5, fontWeight:700, marginBottom:4 }}>{s.title}</div>
               <div style={{ color:'#A8C4DC', fontSize:12, lineHeight:1.6 }}>{s.desc}</div>
@@ -443,19 +690,19 @@ function Results({ target, data, onGetReport, onScanUrl }) {
       {/* ── Scan another page ── */}
       <div style={{ background:'#fff', border:`1px solid ${H5.border}`, borderTop:'none',
         padding:'20px 24px' }}>
-        <div style={{ fontSize:13, fontWeight:700, color:H5.primary, marginBottom:4,
+        <h2 style={{ fontSize:13, fontWeight:700, color:H5.primary, marginBottom:4,
           textTransform:'uppercase', letterSpacing:'0.5px' }}>
           Check another page on this site
-        </div>
+        </h2>
         <p style={{ fontSize:12.5, color:H5.muted, lineHeight:1.6, marginBottom:14 }}>
           Issues often vary by page. Enter a URL to scan another page on this site.
         </p>
 
         <div style={{ display:'flex', gap:8, flexWrap:'wrap', marginBottom: navLinks?.length ? 14 : 0 }}>
-          <input type="url" value={nextUrl} onChange={e => setNextUrl(e.target.value)}
+          <label htmlFor="rescan-url" className="sr-only">URL of another page to scan</label>
+          <input id="rescan-url" type="url" value={nextUrl} onChange={e => setNextUrl(e.target.value)}
             onKeyDown={e => { if (e.key === 'Enter' && nextUrl.trim()) onScanUrl(nextUrl) }}
             placeholder="https://yourwebsite.com/another-page"
-            aria-label="URL of another page to scan"
             style={{ flex:'1 1 240px', padding:'10px 14px', fontSize:13.5,
               border:`1px solid ${H5.border}`, minHeight:'auto' }} />
           <button onClick={() => nextUrl.trim() && onScanUrl(nextUrl)}
@@ -470,11 +717,11 @@ function Results({ target, data, onGetReport, onScanUrl }) {
             <div style={{ fontSize:11.5, color:H5.muted, marginBottom:8 }}>
               Or pick a page from this site's navigation:
             </div>
-            <div style={{ display:'flex', flexWrap: showAllLinks ? 'wrap' : 'nowrap',
+            <div className="nav-link-row" style={{ display:'flex', flexWrap: showAllLinks ? 'wrap' : 'nowrap',
               overflowX: showAllLinks ? 'visible' : 'auto', gap:6, paddingBottom:4 }}>
               {(showAllLinks ? navLinks : navLinks.slice(0, 6)).map(link => (
                 <button key={link.url} onClick={() => onScanUrl(link.url)}
-                  title={link.url}
+                  aria-label={`Scan ${link.label} (${link.url})`}
                   style={{ fontSize:12, color:H5.secondary, background:H5.light,
                     border:`1px solid ${H5.border}`, padding:'6px 12px', cursor:'pointer',
                     fontWeight:600, maxWidth:160, overflow:'hidden', textOverflow:'ellipsis',
@@ -507,8 +754,29 @@ export default function App() {
   const [scanData, setScanData] = useState(null)
   const [error, setError]     = useState(null)
   const [showModal, setShowModal] = useState(false)
+  const [showEmailModal, setShowEmailModal] = useState(false)
   const mainRef = useRef()
   const inputRef = useRef()
+
+  // ── Scan history (localStorage) ───────────────────────────────────
+  const [history, setHistory] = useState(() => {
+    try {
+      return JSON.parse(localStorage.getItem('parity_history') || '[]')
+    } catch { return [] }
+  })
+
+  const saveToHistory = (data) => {
+    const entry = {
+      url: data.url,
+      score: data.score,
+      scannedAt: data.scannedAt,
+      totalDollarMin: data.totalDollarMin,
+      totalDollarMax: data.totalDollarMax,
+    }
+    const updated = [entry, ...history.filter(h => h.url !== data.url)].slice(0, 10)
+    setHistory(updated)
+    try { localStorage.setItem('parity_history', JSON.stringify(updated)) } catch {}
+  }
 
   const runScan = async (overrideUrl) => {
     const targetUrl = (overrideUrl ?? url).trim()
@@ -551,6 +819,7 @@ export default function App() {
 
       setScanData(data)
       setScanned(true)
+      saveToHistory(data)
     } catch (err) {
       console.error(err)
       setError("We couldn't reach the scanner. Please try again in a moment.")
@@ -582,7 +851,7 @@ export default function App() {
               Parity
             </span>
             <span style={{ width:1, height:18, background:'rgba(255,255,255,0.2)' }} aria-hidden="true" />
-            <span style={{ fontSize:11, color:'#A8C4DC', fontWeight:600,
+            <span className="header-subtitle" style={{ fontSize:11, color:'#A8C4DC', fontWeight:600,
               letterSpacing:'0.5px', textTransform:'uppercase' }}>
               Accessibility Auditor
             </span>
@@ -605,7 +874,7 @@ export default function App() {
               textTransform:'uppercase', marginBottom:12 }}>
               Free · Instant · No account needed
             </p>
-            <h1 style={{ fontSize:28, fontWeight:700, color:H5.primary, lineHeight:1.25,
+            <h1 className="hero-h1" style={{ fontSize:28, fontWeight:700, color:H5.primary, lineHeight:1.25,
               letterSpacing:'-0.5px', marginBottom:16, maxWidth:560 }}>
               Is your website accessible to everyone — and are you legally exposed?
             </h1>
@@ -615,7 +884,7 @@ export default function App() {
             </p>
 
             {/* URL input — the whole hero */}
-            <div style={{ display:'flex', gap:0, border:`2px solid ${H5.primary}`,
+            <div className="url-input-row" style={{ display:'flex', gap:0, border:`2px solid ${H5.primary}`,
               background:'#fff', maxWidth:600 }}>
               <label htmlFor="site-url" className="sr-only">Your website URL</label>
               <input ref={inputRef} id="site-url" type="url"
@@ -649,18 +918,48 @@ export default function App() {
             )}
 
             {/* Trust signals */}
-            <div style={{ display:'flex', gap:32, marginTop:36, flexWrap:'wrap' }}>
+            <dl style={{ display:'flex', gap:32, marginTop:36, flexWrap:'wrap' }}>
               {[
                 ['4,000+', 'ADA web lawsuits filed in 2023'],
                 ['96%',    'of top websites have accessibility failures'],
                 ['1 in 4', 'Americans have a disability'],
               ].map(([stat, label]) => (
                 <div key={stat}>
-                  <div style={{ fontSize:22, fontWeight:700, color:H5.secondary }}>{stat}</div>
-                  <div style={{ fontSize:12, color:H5.muted, marginTop:2, maxWidth:140 }}>{label}</div>
+                  <dt style={{ fontSize:22, fontWeight:700, color:H5.secondary }}>{stat}</dt>
+                  <dd style={{ fontSize:12, color:H5.muted, marginTop:2, maxWidth:140 }}>{label}</dd>
                 </div>
               ))}
-            </div>
+            </dl>
+
+            {/* ── Scan history ── */}
+            {history.length > 0 && (
+              <div style={{ marginTop:28, paddingTop:20, borderTop:`1px solid ${H5.border}` }}>
+              <h3 style={{ fontSize:11.5, fontWeight:700, color:H5.muted, textTransform:'uppercase',
+                letterSpacing:'0.5px', marginBottom:10 }}>Previously scanned</h3>
+                <div style={{ display:'flex', flexDirection:'column', gap:6 }}>
+                  {history.map(h => (
+                    <button key={h.url} onClick={() => runScan(h.url)}
+                      aria-label={`Re-scan ${h.url}, previously scored ${h.score}`}
+                      style={{ display:'flex', alignItems:'center', gap:12, width:'100%',
+                        background:'#fff', border:`1px solid ${H5.border}`, padding:'10px 14px',
+                        cursor:'pointer', textAlign:'left' }}>
+                      <div style={{ flex:1, minWidth:0 }}>
+                        <div style={{ fontSize:13, fontWeight:600, color:H5.primary,
+                          overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
+                          {h.url}
+                        </div>
+                        <div style={{ fontSize:11.5, color:H5.muted, marginTop:2 }}>
+                          Score: <strong style={{ color: h.score>=80?H5.risk.low.fg:h.score>=50?H5.risk.medium.fg:H5.risk.high.fg }}>{h.score}</strong>
+                          &nbsp;·&nbsp;{new Date(h.scannedAt).toLocaleDateString()}
+                        </div>
+                      </div>
+                      <span aria-hidden="true" style={{ fontSize:12, color:H5.secondary, fontWeight:600,
+                        whiteSpace:'nowrap' }}>Re-scan →</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         )}
 
@@ -699,7 +998,7 @@ export default function App() {
             </div>
 
             {/* Credentials row */}
-            <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(220px,1fr))',
+            <div className="creds-grid" style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(220px,1fr))',
               gap:1, border:`1px solid ${H5.border}`, marginBottom:24 }}>
               {[
                 {
@@ -766,6 +1065,7 @@ export default function App() {
                 data={scanData}
                 onGetReport={() => setShowModal(true)}
                 onScanUrl={runScan}
+                onEmailReport={() => setShowEmailModal(true)}
               />
             </>
           )}
@@ -783,6 +1083,13 @@ export default function App() {
           }}
           onSubmit={() => {}}
           onClose={() => setShowModal(false)}
+        />
+      )}
+
+      {showEmailModal && scanData && (
+        <EmailReportModal
+          auditData={{ url: scanData.url, score: scanData.score }}
+          onClose={() => setShowEmailModal(false)}
         />
       )}
     </>
