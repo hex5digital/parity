@@ -65,6 +65,8 @@ const GLOBAL_CSS = `
   :focus-visible { outline: 3px solid #00D4FF; outline-offset: 3px; }
   button { cursor: pointer; font-family: inherit; }
   button, a, input, select, textarea { min-height: 44px; }
+  footer a, nav a { min-height: auto; }
+  a[style*="minHeight"] { min-height: unset; }
   .skip-link { position:absolute; top:-100px; left:0; background:#0A0F1E; color:#fff;
     padding:12px 20px; font-weight:600; font-size:14px; z-index:9999; text-decoration:none; }
   .skip-link:focus { top:0; }
@@ -980,7 +982,8 @@ export default function App() {
               style={{ fontSize:12.5, fontWeight:600, color:'rgba(255,255,255,0.6)',
                 textDecoration:'none', padding:'8px 16px',
                 border:'1px solid rgba(255,255,255,0.12)',
-                fontFamily:"'Inter', sans-serif" }}>
+                fontFamily:"'Inter', sans-serif",
+                display:'inline-flex', alignItems:'center', minHeight:'auto' }}>
               Talk to an expert
             </a>
           </nav>
@@ -1276,11 +1279,12 @@ export default function App() {
             </div>
             <div style={{ display:'flex', gap:20, alignItems:'center', flexWrap:'wrap' }}>
               <span style={{ fontSize:11, color:'rgba(255,255,255,0.25)',
-                fontFamily:"'Inter', sans-serif" }}>
+                fontFamily:"'Inter', sans-serif", lineHeight:1 }}>
                 DHS Trusted Tester certified · WCAG 2.2 & Section 508 methodology · Powered by axe-core
               </span>
               <a href="https://hex5digital.com" style={{ fontSize:11, color:'rgba(255,255,255,0.35)',
-                textDecoration:'none', fontFamily:"'Inter', sans-serif" }}>
+                textDecoration:'none', fontFamily:"'Inter', sans-serif",
+                minHeight:'auto', lineHeight:1 }}>
                 © {new Date().getFullYear()} Hex5 Digital
               </a>
             </div>
