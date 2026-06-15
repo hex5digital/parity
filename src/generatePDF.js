@@ -36,31 +36,45 @@ function addPageChrome(doc, pageNum, totalPages, target, logoDataUri) {
   const W = doc.internal.pageSize.getWidth()
   const H = doc.internal.pageSize.getHeight()
 
-  // Header bar
+  // Header bar — taller to give logo room to breathe
   setFill(doc, NAVY)
-  doc.rect(0, 0, W, 14, 'F')
+  doc.rect(0, 0, W, 18, 'F')
 
-  // Logo in header (white version)
+  // Logo in header (white version) — left side, vertically centered in bar
   if (logoDataUri) {
-    try { doc.addImage(logoDataUri, 'PNG', 6, 1.5, 30, 10, '', 'FAST') } catch(_) {}
+    try { doc.addImage(logoDataUri, 'PNG', 6, 2, 26, 8, '', 'FAST') } catch(_) {}
   }
+
+  // Vertical separator between logo and text
+  setFill(doc, [255,255,255,0.2])
+  doc.setDrawColor(255,255,255)
+  doc.setLineWidth(0.3)
+  doc.line(35, 3.5, 35, 14.5)
+
+  // "Parity · Accessibility Audit Report" — right of separator, top line
+  setFont(doc, [168,196,220])
+  doc.setFontSize(6)
+  doc.setFont('helvetica','bold')
+  doc.text('PARITY  ·  ACCESSIBILITY AUDIT REPORT', 38, 8)
+
+  // Standard line below
+  doc.setFont('helvetica','normal')
+  doc.setFontSize(5.5)
+  setFont(doc, [120,160,200])
+  const stdLabel = target ? target.replace(/^https?:\/\//, '').slice(0, 60) : ''
+  if (stdLabel) doc.text(stdLabel, 38, 13)
 
   // Right side: date + page
   setFont(doc, WHITE)
-  doc.setFontSize(7.5)
+  doc.setFontSize(7)
   doc.setFont('helvetica','normal')
   const dateStr = new Date().toLocaleDateString('en-US', { month:'long', day:'numeric', year:'numeric' })
-  doc.text(dateStr, W - 8, 6, { align:'right' })
-  doc.text(`Page ${pageNum} of ${totalPages}`, W - 8, 11, { align:'right' })
+  doc.text(dateStr, W - 8, 8, { align:'right' })
+  doc.text(`Page ${pageNum} of ${totalPages}`, W - 8, 13, { align:'right' })
 
   // Blue underline on header
   setFill(doc, BLUE)
-  doc.rect(0, 14, W, 1.2, 'F')
-
-  // Subheader label
-  setFont(doc, [168,196,220])
-  doc.setFontSize(6.5)
-  doc.text('Accessibility Audit Report  ·  WCAG 2.2 AA  ·  Section 508', 6, 12)
+  doc.rect(0, 18, W, 1.2, 'F')
 
   // Footer
   setFill(doc, LIGHT)
@@ -75,7 +89,7 @@ function addPageChrome(doc, pageNum, totalPages, target, logoDataUri) {
 // Expects `issues` shaped like api/scan.js output:
 //   { id, risk: 'high'|'medium'|'low', plain, who, fix, count,
 //     effort: '2–8 hours', dollarMin, dollarMax, devDetail }
-export async function generateAuditPDF({ issues, target, score, lead, totalDollarMin, totalDollarMax }) {
+export async function generateAuditPDF({ issues, target, score, lead, totalDollarMin, totalDollarMax, standard }) {
   const doc = new jsPDF({ unit:'mm', format:'letter', orientation:'portrait' })
   const W   = doc.internal.pageSize.getWidth()   // 215.9mm
   const H   = doc.internal.pageSize.getHeight()  // 279.4mm
@@ -100,36 +114,41 @@ export async function generateAuditPDF({ issues, target, score, lead, totalDolla
   const riskColor = critCount >= 3 ? RISK_COLORS.high : critCount >= 1 ? RISK_COLORS.medium : RISK_COLORS.low
 
   // ── PAGE 1: COVER ─────────────────────────────────────────────────
+  // Dark navy hero band
   setFill(doc, NAVY)
-  doc.rect(0, 0, W, 80, 'F')
+  doc.rect(0, 0, W, 90, 'F')
 
   setFill(doc, BLUE)
-  doc.rect(0, 80, W, 3, 'F')
+  doc.rect(0, 90, W, 3, 'F')
 
+  // Logo — larger, with clear breathing room below it
   if (logoWhite) {
-    try { doc.addImage(logoWhite, 'PNG', L, 18, 55, 14, '', 'FAST') } catch(_) {}
+    try { doc.addImage(logoWhite, 'PNG', L, 14, 60, 18, '', 'FAST') } catch(_) {}
   }
 
-  setFont(doc, [168,196,220])
-  doc.setFontSize(9)
-  doc.setFont('helvetica','bold')
-  doc.text('PARITY  ·  ACCESSIBILITY AUDITOR', L, 40)
-
-  setFont(doc, WHITE)
-  doc.setFontSize(26)
-  doc.setFont('helvetica','bold')
-  doc.text('Accessibility', L, 55)
-  doc.text('Audit Report', L, 65)
-
+  // Purple accent bar — positioned clear of logo
   setFill(doc, PURPLE)
-  doc.rect(L - 3, 46, 2, 24, 'F')
+  doc.rect(L - 3, 44, 2, 32, 'F')
+
+  // "PARITY · ACCESSIBILITY AUDITOR" tagline — well below logo
+  setFont(doc, [168,196,220])
+  doc.setFontSize(8.5)
+  doc.setFont('helvetica','bold')
+  doc.text('PARITY  ·  ACCESSIBILITY AUDITOR', L, 46)
+
+  // Report title
+  setFont(doc, WHITE)
+  doc.setFontSize(28)
+  doc.setFont('helvetica','bold')
+  doc.text('Accessibility', L, 60)
+  doc.text('Audit Report', L, 72)
 
   // Meta block
-  let y = 92
+  let y = 100
   const metaRows = [
     ['Audit target', target || 'Not specified'],
     ['Report date',  ts],
-    ['Standards',    'WCAG 2.2 (Level A & AA), Section 508'],
+    ['Standards',    standard || 'WCAG 2.2 AA'],
     ['Auditor',      'Hex5 Parity — automated scan, hex5digital.com'],
   ]
   if (lead?.name) metaRows.push(['Prepared for', `${lead.name}  ·  ${lead.company}  ·  ${lead.email}`])
