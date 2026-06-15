@@ -89,6 +89,22 @@ export default async function handler(req, res) {
   } catch (err) {
     if (browser) await browser.close().catch(() => {})
     console.error('Crawl error:', err)
-    return res.status(500).json({ error: 'crawl_failed', message: err.message })
+
+    const msg = err.message || ''
+    let friendlyMessage = 'We couldn\'t crawl that site. Please check the URL and try again.'
+
+    if (msg.includes('ERR_CONNECTION_REFUSED') || msg.includes('ERR_CONNECTION_RESET')) {
+      friendlyMessage = 'This site refused the connection — it may be blocking automated access. Try a different URL.'
+    } else if (msg.includes('ERR_NAME_NOT_RESOLVED') || msg.includes('net::ERR_NAME')) {
+      friendlyMessage = 'That domain couldn\'t be found. Check the URL for typos and try again.'
+    } else if (msg.includes('ERR_SSL') || msg.includes('certificate')) {
+      friendlyMessage = 'This site has an SSL/certificate issue that prevented access.'
+    } else if (msg.includes('timeout') || msg.includes('Timeout')) {
+      friendlyMessage = 'The site took too long to respond. It may be slow or blocking automated access.'
+    } else if (msg.includes('403') || msg.includes('Forbidden')) {
+      friendlyMessage = 'This site returned a 403 Forbidden — it\'s actively blocking automated scanners.'
+    }
+
+    return res.status(500).json({ error: 'crawl_failed', message: friendlyMessage })
   }
 }

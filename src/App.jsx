@@ -1005,9 +1005,14 @@ function TeamScan({ user, standard }) {
               Scanning takes approximately 30 seconds per page.
             </p>
             {phase === 'error' && (
-              <div style={{ background:'rgba(239,68,68,0.1)', border:'1px solid rgba(239,68,68,0.3)',
-                padding:'12px 16px', marginTop:12 }}>
-                <p style={{ fontSize:13, color:'#FCA5A5', margin:0 }}>{errorMsg}</p>
+              <div style={{ background:'rgba(239,68,68,0.08)', border:'1px solid rgba(239,68,68,0.25)',
+                padding:'16px 18px', marginTop:12 }}>
+                <p style={{ fontSize:13, fontWeight:700, color:'#FCA5A5', marginBottom:4 }}>
+                  Couldn't complete the scan
+                </p>
+                <p style={{ fontSize:12.5, color:'rgba(255,255,255,0.55)', lineHeight:1.6, margin:0 }}>
+                  {errorMsg}
+                </p>
               </div>
             )}
           </div>
