@@ -862,6 +862,374 @@ function Results({ target, data, onGetReport, onScanUrl, onEmailReport, unlocked
 }
 
 // ── Main App ───────────────────────────────────────────────────────
+// ── TeamScan ────────────────────────────────────────────────────────
+function TeamScan({ user, standard }) {
+  const [teamUrl, setTeamUrl]     = useState('')
+  const [phase, setPhase]         = useState('idle') // idle | crawling | scanning | done | error
+  const [pages, setPages]         = useState([])      // [{url, label, status, data}]
+  const [currentIdx, setCurrentIdx] = useState(0)
+  const [errorMsg, setErrorMsg]   = useState('')
+  const abortRef = useRef(false)
+
+  const reset = () => {
+    abortRef.current = true
+    setPhase('idle')
+    setPages([])
+    setCurrentIdx(0)
+    setErrorMsg('')
+    setTimeout(() => { abortRef.current = false }, 100)
+  }
+
+  const startScan = async () => {
+    let url = teamUrl.trim()
+    if (!url) return
+    if (!/^https?:\/\//i.test(url)) url = `https://${url}`
+    abortRef.current = false
+    setPhase('crawling')
+    setPages([])
+    setCurrentIdx(0)
+    setErrorMsg('')
+
+    // Step 1: discover pages
+    try {
+      const crawlRes = await fetch('/api/crawl', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url }),
+      })
+      if (!crawlRes.ok) throw new Error('Crawl failed')
+      const { links } = await crawlRes.json()
+      if (!links?.length) throw new Error('No pages found')
+
+      const initialPages = links.map(l => ({ ...l, status:'pending', data:null, error:null }))
+      setPages(initialPages)
+      setPhase('scanning')
+
+      // Step 2: scan each page sequentially
+      let results = [...initialPages]
+      for (let i = 0; i < results.length; i++) {
+        if (abortRef.current) break
+        setCurrentIdx(i)
+        setPages(p => p.map((pg, idx) => idx === i ? { ...pg, status:'scanning' } : pg))
+
+        try {
+          const scanRes = await fetch('/api/scan', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ url: results[i].url, standard }),
+          })
+          const data = await scanRes.json()
+          results[i] = { ...results[i], status: scanRes.ok ? 'done' : 'error',
+            data: scanRes.ok ? data : null,
+            error: scanRes.ok ? null : (data.message || 'Scan failed') }
+        } catch (err) {
+          results[i] = { ...results[i], status:'error', error: err.message }
+        }
+        setPages([...results])
+      }
+
+      if (!abortRef.current) setPhase('done')
+
+    } catch (err) {
+      setErrorMsg(err.message || 'Something went wrong')
+      setPhase('error')
+    }
+  }
+
+  const donePages  = pages.filter(p => p.status === 'done')
+  const errorPages = pages.filter(p => p.status === 'error')
+  const allIssues  = donePages.flatMap(p => (p.data?.issues || []).map(i => ({ ...i, page: p.url })))
+  const highCount  = allIssues.filter(i => i.risk === 'high').length
+  const medCount   = allIssues.filter(i => i.risk === 'medium').length
+  const avgScore   = donePages.length
+    ? Math.round(donePages.reduce((s,p) => s + (p.data?.score||0), 0) / donePages.length)
+    : 0
+
+  // Unique issues across all pages (by id)
+  const uniqueIssues = Object.values(
+    allIssues.reduce((acc, i) => {
+      if (!acc[i.id]) acc[i.id] = { ...i, pages:[], count:0, dollarMin:0, dollarMax:0 }
+      acc[i.id].pages.push(i.page)
+      acc[i.id].count += i.count
+      acc[i.id].dollarMin += i.dollarMin
+      acc[i.id].dollarMax += i.dollarMax
+      return acc
+    }, {})
+  ).sort((a,b) => {
+    const order = { high:0, medium:1, low:2 }
+    return order[a.risk] - order[b.risk]
+  })
+
+  return (
+    <div style={{ background:'#0A0F1E', borderTop:'1px solid rgba(0,212,255,0.1)' }}>
+      <div style={{ maxWidth:860, margin:'0 auto', padding:'32px 24px' }}>
+
+        {/* Header */}
+        <div style={{ display:'flex', alignItems:'center', gap:12, marginBottom:24 }}>
+          <div style={{ flex:1 }}>
+            <div style={{ fontFamily:"'JetBrains Mono', monospace", fontSize:11,
+              color:'#00D4FF', fontWeight:700, letterSpacing:'1px',
+              textTransform:'uppercase', marginBottom:4 }}>
+              Team · Full-site scanner
+            </div>
+            <p style={{ fontSize:13, color:'rgba(255,255,255,0.5)',
+              fontFamily:"'Inter', sans-serif" }}>
+              Signed in as <strong style={{ color:'rgba(255,255,255,0.8)' }}>{user.email}</strong>
+            </p>
+          </div>
+        </div>
+
+        {/* URL input */}
+        {phase === 'idle' || phase === 'error' ? (
+          <div>
+            <div style={{ display:'flex', gap:0, marginBottom:12 }}>
+              <label htmlFor="team-url" className="sr-only">Website URL to scan</label>
+              <input id="team-url" type="url" value={teamUrl}
+                onChange={e => setTeamUrl(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter') startScan() }}
+                placeholder="https://clientwebsite.com"
+                style={{ flex:1, padding:'13px 18px', fontSize:14, border:'none',
+                  outline:'none', background:'rgba(255,255,255,0.06)',
+                  color:'#fff', fontFamily:"'Inter', sans-serif",
+                  borderLeft:'2px solid rgba(0,212,255,0.3)' }} />
+              <button onClick={startScan}
+                style={{ padding:'13px 24px', border:'none', background:'#00D4FF',
+                  color:'#0A0F1E', fontSize:14, fontWeight:700, cursor:'pointer',
+                  fontFamily:"'Inter', sans-serif", whiteSpace:'nowrap' }}>
+                Start full-site scan
+              </button>
+            </div>
+            <p style={{ fontSize:12, color:'rgba(255,255,255,0.3)',
+              fontFamily:"'Inter', sans-serif" }}>
+              We'll discover all internal pages (up to 30) and scan each one sequentially.
+              Scanning takes approximately 30 seconds per page.
+            </p>
+            {phase === 'error' && (
+              <div style={{ background:'rgba(239,68,68,0.1)', border:'1px solid rgba(239,68,68,0.3)',
+                padding:'12px 16px', marginTop:12 }}>
+                <p style={{ fontSize:13, color:'#FCA5A5', margin:0 }}>{errorMsg}</p>
+              </div>
+            )}
+          </div>
+        ) : null}
+
+        {/* Crawling state */}
+        {phase === 'crawling' && (
+          <div style={{ display:'flex', alignItems:'center', gap:16, padding:'20px 0' }}>
+            <div style={{ width:24, height:24, border:'2px solid rgba(0,212,255,0.2)',
+              borderTop:'2px solid #00D4FF', borderRadius:'50%',
+              animation:'spin 0.8s linear infinite', flexShrink:0 }} />
+            <div>
+              <p style={{ fontSize:14, color:'#fff', fontWeight:600, margin:0,
+                fontFamily:"'Inter', sans-serif" }}>Discovering pages...</p>
+              <p style={{ fontSize:12, color:'rgba(255,255,255,0.4)', margin:'4px 0 0',
+                fontFamily:"'JetBrains Mono', monospace" }}>{teamUrl}</p>
+            </div>
+          </div>
+        )}
+
+        {/* Scanning progress */}
+        {(phase === 'scanning' || phase === 'done') && pages.length > 0 && (
+          <div>
+            {/* Progress bar */}
+            <div style={{ marginBottom:20 }}>
+              <div style={{ display:'flex', justifyContent:'space-between',
+                fontSize:12, color:'rgba(255,255,255,0.5)', marginBottom:6,
+                fontFamily:"'Inter', sans-serif" }}>
+                <span>
+                  {phase === 'done'
+                    ? `Scan complete — ${donePages.length} of ${pages.length} pages scanned`
+                    : `Scanning page ${currentIdx + 1} of ${pages.length}...`
+                  }
+                </span>
+                <span>{Math.round((donePages.length + errorPages.length) / pages.length * 100)}%</span>
+              </div>
+              <div style={{ height:4, background:'rgba(255,255,255,0.1)', borderRadius:2 }}>
+                <div style={{
+                  height:'100%', borderRadius:2, background:'#00D4FF',
+                  width:`${(donePages.length + errorPages.length) / pages.length * 100}%`,
+                  transition:'width 0.3s ease',
+                }} />
+              </div>
+            </div>
+
+            {/* Page list */}
+            <div style={{ display:'flex', flexDirection:'column', gap:2, marginBottom:24,
+              maxHeight:300, overflowY:'auto' }}>
+              {pages.map((pg, i) => (
+                <div key={pg.url} style={{
+                  display:'flex', alignItems:'center', gap:12,
+                  padding:'8px 12px', background:'rgba(255,255,255,0.03)',
+                  border:'1px solid rgba(255,255,255,0.06)',
+                }}>
+                  <div style={{ width:16, flexShrink:0, textAlign:'center' }}>
+                    {pg.status === 'done' && <span style={{ color:'#00D4FF' }}>✓</span>}
+                    {pg.status === 'error' && <span style={{ color:'#F87171' }}>✗</span>}
+                    {pg.status === 'scanning' && (
+                      <div style={{ width:12, height:12, border:'1.5px solid rgba(0,212,255,0.2)',
+                        borderTop:'1.5px solid #00D4FF', borderRadius:'50%',
+                        animation:'spin 0.8s linear infinite', margin:'0 auto' }} />
+                    )}
+                    {pg.status === 'pending' && <span style={{ color:'rgba(255,255,255,0.2)' }}>○</span>}
+                  </div>
+                  <div style={{ flex:1, minWidth:0 }}>
+                    <div style={{ fontSize:12, color: pg.status==='done' ? '#fff' : 'rgba(255,255,255,0.4)',
+                      overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap',
+                      fontFamily:"'JetBrains Mono', monospace" }}>
+                      {pg.url}
+                    </div>
+                  </div>
+                  {pg.status === 'done' && pg.data && (
+                    <div style={{ display:'flex', gap:8, flexShrink:0 }}>
+                      <span style={{ fontSize:11, fontWeight:700,
+                        color: pg.data.score>=80?H5.risk.low.fg:pg.data.score>=50?H5.risk.medium.fg:H5.risk.high.fg,
+                        fontFamily:"'JetBrains Mono', monospace" }}>
+                        {pg.data.score}
+                      </span>
+                      {pg.data.issues?.filter(i=>i.risk==='high').length > 0 && (
+                        <span style={{ fontSize:10, background:H5.risk.high.bg,
+                          color:H5.risk.high.fg, padding:'1px 6px', fontWeight:700 }}>
+                          {pg.data.issues.filter(i=>i.risk==='high').length} HIGH
+                        </span>
+                      )}
+                    </div>
+                  )}
+                  {pg.status === 'error' && (
+                    <span style={{ fontSize:11, color:'#F87171', flexShrink:0 }}>Failed</span>
+                  )}
+                </div>
+              ))}
+            </div>
+
+            {/* Results summary — shown when done */}
+            {phase === 'done' && (
+              <div>
+                {/* Summary stats */}
+                <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(140px,1fr))',
+                  gap:2, marginBottom:24, border:`1px solid ${H5.border}` }}>
+                  {[
+                    { val: avgScore, label:'Avg score', color: avgScore>=80?H5.risk.low.fg:avgScore>=50?H5.risk.medium.fg:H5.risk.high.fg },
+                    { val: donePages.length, label:'Pages scanned', color: H5.secondary },
+                    { val: highCount, label:'High-risk issues', color: H5.risk.high.fg },
+                    { val: medCount, label:'Medium-risk issues', color: H5.risk.medium.fg },
+                    { val: uniqueIssues.length, label:'Unique issue types', color: H5.primary },
+                  ].map(s => (
+                    <div key={s.label} style={{ background:'#fff', padding:'16px 18px', textAlign:'center' }}>
+                      <div style={{ fontSize:28, fontWeight:700, color:s.color, lineHeight:1,
+                        fontFamily:"'JetBrains Mono', monospace" }}>{s.val}</div>
+                      <div style={{ fontSize:11, color:H5.muted, marginTop:4,
+                        textTransform:'uppercase', letterSpacing:'0.5px' }}>{s.label}</div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Issue list */}
+                {uniqueIssues.length > 0 && (
+                  <div style={{ background:'#fff', padding:24, marginBottom:16 }}>
+                    <h2 style={{ fontSize:14, fontWeight:700, color:H5.primary,
+                      marginBottom:16, textTransform:'uppercase', letterSpacing:'0.5px' }}>
+                      All findings across {donePages.length} pages
+                    </h2>
+                    <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
+                      {uniqueIssues.map(issue => (
+                        <div key={issue.id} style={{ padding:'14px 16px',
+                          border:`1px solid ${H5.border}`,
+                          borderLeft:`3px solid ${issue.risk==='high'?H5.risk.high.fg:issue.risk==='medium'?H5.risk.medium.fg:H5.border}` }}>
+                          <div style={{ display:'flex', alignItems:'flex-start',
+                            justifyContent:'space-between', gap:12, flexWrap:'wrap' }}>
+                            <div style={{ flex:1 }}>
+                              <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:4, flexWrap:'wrap' }}>
+                                <span style={{ fontSize:10, fontWeight:700, padding:'2px 8px',
+                                  background: issue.risk==='high'?H5.risk.high.bg:issue.risk==='medium'?H5.risk.medium.bg:H5.light,
+                                  color: issue.risk==='high'?H5.risk.high.fg:issue.risk==='medium'?H5.risk.medium.fg:H5.muted,
+                                  textTransform:'uppercase', letterSpacing:'0.5px' }}>
+                                  {issue.risk} risk
+                                </span>
+                                {issue.likelySitewide && (
+                                  <span style={{ fontSize:10, fontWeight:700, color:H5.tertiary,
+                                    background:'#F3E8FF', padding:'2px 8px',
+                                    textTransform:'uppercase', letterSpacing:'0.5px' }}>
+                                    Site-wide
+                                  </span>
+                                )}
+                              </div>
+                              <div style={{ fontSize:14, fontWeight:600, color:H5.primary, marginBottom:4 }}>
+                                {issue.plain}
+                              </div>
+                              <div style={{ fontSize:12, color:H5.muted }}>
+                                Found on <strong>{issue.pages.length}</strong> page{issue.pages.length>1?'s':''} &nbsp;·&nbsp;
+                                {issue.count} instance{issue.count>1?'s':''} total &nbsp;·&nbsp;
+                                Est. {fmt(issue.dollarMin)}–{fmt(issue.dollarMax)} to remediate
+                              </div>
+                              <div style={{ fontSize:11.5, color:H5.muted, marginTop:4,
+                                fontFamily:"'JetBrains Mono', monospace", lineHeight:1.5 }}>
+                                {issue.pages.slice(0,3).map(p => {
+                                  try { return new URL(p).pathname || '/' } catch { return p }
+                                }).join(' · ')}
+                                {issue.pages.length > 3 && ` · +${issue.pages.length-3} more`}
+                              </div>
+                            </div>
+                            <div style={{ textAlign:'right', flexShrink:0 }}>
+                              <div style={{ fontSize:18, fontWeight:700, color:H5.secondary,
+                                fontFamily:"'JetBrains Mono', monospace" }}>
+                                {fmt(issue.dollarMin)}–{fmt(issue.dollarMax)}
+                              </div>
+                              <div style={{ fontSize:11, color:H5.muted }}>est. cost</div>
+                            </div>
+                          </div>
+                          <div style={{ fontSize:12.5, color:'#374151', lineHeight:1.7,
+                            marginTop:10, paddingTop:10, borderTop:`1px solid ${H5.border}` }}>
+                            <strong>Who this affects:</strong> {issue.who}
+                          </div>
+                          <div style={{ fontSize:12.5, color:'#374151', lineHeight:1.7, marginTop:6 }}>
+                            <strong>How to fix:</strong> {issue.fix}
+                          </div>
+                          {issue.devDetail && (
+                            <div style={{ fontSize:11.5, color:H5.muted, lineHeight:1.6,
+                              marginTop:8, padding:'8px 12px', background:H5.light,
+                              borderLeft:`2px solid ${H5.border}`,
+                              fontFamily:"'JetBrains Mono', monospace" }}>
+                              Dev note: {issue.devDetail}
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Actions */}
+                <div style={{ display:'flex', gap:10, flexWrap:'wrap' }}>
+                  <button onClick={reset}
+                    style={{ padding:'11px 22px', border:`1px solid rgba(0,212,255,0.3)`,
+                      background:'transparent', color:'#00D4FF', fontSize:13.5,
+                      fontWeight:600, cursor:'pointer', fontFamily:"'Inter', sans-serif" }}>
+                    ← Scan another site
+                  </button>
+                  <div style={{ fontSize:12, color:'rgba(255,255,255,0.3)', display:'flex',
+                    alignItems:'center', fontFamily:"'Inter', sans-serif" }}>
+                    VPAT export coming soon
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Stop button while scanning */}
+            {phase === 'scanning' && (
+              <button onClick={reset}
+                style={{ padding:'9px 18px', border:'1px solid rgba(239,68,68,0.4)',
+                  background:'transparent', color:'#F87171', fontSize:13,
+                  fontWeight:600, cursor:'pointer', fontFamily:"'Inter', sans-serif" }}>
+                Stop scan
+              </button>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
 export default function App() {
   const [url, setUrl]         = useState('')
   const [standard, setStandard] = useState('wcag22aa')
@@ -875,6 +1243,19 @@ export default function App() {
   const [unlocked, setUnlocked] = useState(false)
   const mainRef = useRef()
   const inputRef = useRef()
+
+  // ── Auth state ────────────────────────────────────────────────────
+  const [user, setUser]           = useState(null)
+  const [authLoading, setAuthLoading] = useState(true)
+  const [showTeamScan, setShowTeamScan] = useState(false)
+
+  // Check session on mount
+  useEffect(() => {
+    fetch('/api/auth?action=me')
+      .then(r => r.json())
+      .then(d => { setUser(d.user || null); setAuthLoading(false) })
+      .catch(() => setAuthLoading(false))
+  }, [])
 
   // ── Scan history (localStorage) ───────────────────────────────────
   const [history, setHistory] = useState(() => {
@@ -986,6 +1367,35 @@ export default function App() {
                 display:'inline-flex', alignItems:'center', minHeight:'auto' }}>
               Talk to an expert
             </a>
+            {/* Auth button */}
+            {!authLoading && (
+              user ? (
+                <div style={{ display:'flex', alignItems:'center', gap:10 }}>
+                  <button onClick={() => setShowTeamScan(s => !s)}
+                    style={{ fontSize:12, fontWeight:700, color:'#00D4FF',
+                      background:'rgba(0,212,255,0.1)', border:'1px solid rgba(0,212,255,0.3)',
+                      padding:'7px 14px', cursor:'pointer', fontFamily:"'Inter', sans-serif",
+                      minHeight:'auto', whiteSpace:'nowrap' }}>
+                    {showTeamScan ? 'Public view' : '⚡ Team scan'}
+                  </button>
+                  <a href="/api/auth?action=logout"
+                    style={{ fontSize:11.5, color:'rgba(255,255,255,0.4)',
+                      textDecoration:'none', minHeight:'auto',
+                      fontFamily:"'Inter', sans-serif" }}>
+                    Sign out
+                  </a>
+                </div>
+              ) : (
+                <a href="/api/auth?action=login"
+                  style={{ fontSize:12.5, fontWeight:600, color:'rgba(255,255,255,0.5)',
+                    textDecoration:'none', padding:'7px 14px',
+                    border:'1px solid rgba(255,255,255,0.08)',
+                    fontFamily:"'Inter', sans-serif",
+                    display:'inline-flex', alignItems:'center', minHeight:'auto' }}>
+                  Team sign in
+                </a>
+              )
+            )}
           </nav>
 
           <div style={{ maxWidth:640, margin:'0 auto', padding:'72px 32px 64px',
@@ -1080,6 +1490,11 @@ export default function App() {
             </dl>
           </div>
         </div>
+      )}
+
+      {/* ── Team scan panel ── */}
+      {!scanned && !loading && user && showTeamScan && (
+        <TeamScan user={user} standard={standard} />
       )}
 
       {/* ── Standard selector + history ── */}
